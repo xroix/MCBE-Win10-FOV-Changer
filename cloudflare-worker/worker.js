@@ -16,9 +16,8 @@ offsets = {
     ]
   },
   "1.14.6005": {
-    "offsets": {
-      "fov": [
-        0x03059208,
+    "base_offset": 0x03059208,
+    "offsets": [
         0xC0,
         0x890,
         0xB0,
@@ -26,21 +25,39 @@ offsets = {
         0xB0,
         0x120,
         0xF0
-      ],
-      "sensitivity": [
-
-      ],
-      "hide_hand": [
-
-      ]
-  }
+    ]
+  },
+  "1.16.2": {
+    "base_offset": 0x03858120,
+    "offsets": [
+        0x18,
+        0xC8,
+        0x830,
+        0x8,
+        0x40,
+        0x120,
+        0xF0
+    ]
+  },
+  "1.16.102": {
+    "base_offset": 0x036D94B8,
+    "offsets": [
+        0xE8,
+        0x10,
+        0xE38,
+        0xB0,
+        0x120,
+        0xF0
+    ]
   }
 };
 
 // Needed request version for mc version
 neededVersion = {
   "1.14.3002": 100,
-  "1.14.6005": 101
+  "1.14.6005": 101,
+  "1.16.2": 101,
+  "1.16.102": 101
 };
 
 // old, will get removed

@@ -64,6 +64,9 @@ class Network:
         self.license_key = ""
         self.license_obj = None
 
+        # Finish
+        self.interface.update({"Network": self})
+
     def authenticate(self, license_key: str) -> tuple:
         """ Authenticate the given license key
         :param license_key: license key
@@ -180,7 +183,7 @@ class Network:
         # Retry certain times
         data = None
         tries = 0
-        while tries <= 2:
+        while tries <= 3:
             try:
                 resp = requests.get(f"{self.storage.get('api')}offsets/{version_id}", params={"api_key": self.api_key})
                 logger.logDebug(f"Feature request number {tries}")
@@ -221,30 +224,34 @@ class Network:
             except ErrorHandlingException as e:
                 logger.logDebug(e.message)
                 ui.queueAlertMessage(self.interface, e.message, warning=True)
-                break
+                return False
 
             tries += 1
-        
+
         if not data:
             logger.logDebug("Couldn't communicate with the server!")
             ui.queueAlertMessage(self.interface, "Couldn't communicate with the server!", warning=True)
             return False
-            
+
         else:
             # Decompress
             try:
                 offs = json.loads(zlib.decompress(base64.b64decode(data["offsets"].encode("utf8"))).decode("utf8"))
+
+                # Parse server response
+                self.storage.features = storage.Features.from_server_response(self.interface, offs)
 
             except json.JSONDecodeError:
                 logger.logDebug("Invalid offsets!")
                 ui.queueAlertMessage(self.interface, "Invalid offsets!", warning=True)
                 return False
 
-            # Update storage
-            self.storage.features = storage.Features.from_server_response(self.interface, offs)
+            except KeyError as e:
+                logger.logDebug(str(e))
+                ui.queueAlertMessage(self.interface, "Invalid offsets!", warning=True)
+                return False
 
             self.storage.set("features", self.storage.features.for_json)
-            self.storage.set("features_len", 3)  # TODO len
             self.storage.set("mc_version", current_version)
             self.storage.updateFile()
 

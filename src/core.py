@@ -1,3 +1,5 @@
+""" The entrypoint - core methods and classes"""
+
 import time
 
 import pystray as ps
@@ -18,6 +20,7 @@ class SystemTray:
         super().__init__()
 
         # Interface, saves references of important objects
+        # ** Add new references in its init (at the end to avoid not created attributes) ! **
         self.interface = {"SystemTray": self}
 
         # UI

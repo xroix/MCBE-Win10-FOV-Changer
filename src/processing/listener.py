@@ -21,7 +21,8 @@ class Listener(keyboard.Listener):
         self.gateway = interface["Gateway"]
         self.storage = interface["Storage"]
 
-        self.pressed = False
+        self.features = self.storage.features
+        self.pressed = {}
 
     @staticmethod
     def unctrl(c: int) -> str:
@@ -39,20 +40,22 @@ class Listener(keyboard.Listener):
         """ On press event
         :param key: the key code
         """
-        try:
-            if isinstance(key, keyboard.KeyCode):
-                # Normalize
-                code = self.unctrl(key.vk).lower()
+        # Normalize the key code
+        if isinstance(key, keyboard.KeyCode):
+            code = self.unctrl(key.vk).lower()
 
-                if self.pressed:
-                    pass
+            # Valid key exists?
+            if code in self.storage.keys:
 
-                elif code == self.zoom_key:
-                    self.pm.write_float(self.pm.fov_address, self.pm.zoom_fov)
-                    self.pressed = True
+                # First press?
+                if code not in self.pressed or not self.pressed[code]:
+                    self.pressed.update({code: True})
 
-        except pymem.exception.MemoryWriteError:
-            errorMSG("Minecraft Bedrock was closed! or Something else went wrong!")
+                    feature_id = self.features.keys[code]
+                    feature_value = self.features[feature_id]
+
+                    getattr(self, f"read_{feature_value['value'][0]}")(self.features[feature_id],
+                                                                       feature_value['value'][1])
 
     def on_release(self, key: keyboard.KeyCode):
         """ On release event

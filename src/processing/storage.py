@@ -11,7 +11,7 @@ def find_file(name):
     """
     if hasattr(sys, "frozen"):
         directory = os.path.dirname(sys.executable)
-        name = name.split("\\")[-1]
+        name = os.path.basename(name)
 
     else:
         directory = os.path.dirname(sys.argv[0])
@@ -31,10 +31,20 @@ class Features:
         self.storage = interface["Storage"]
 
         # Features
-        self.child_format = self.storage.get("features")
-        self.list_format = {}
+        self.data = {}
 
+        # Stores the found addresses for the gateway
+        self.addresses = {}
+
+        # TkVars from ui
+        self.tk_vars = {}
+
+        # For quick access
+        self.keys = {}
         self.len = 0
+
+        # Parsing the shorten keys from server response
+        # and check if something is missing
         self.hash_table = {
             "n": "name",  # The name
             "a": "available",  # If it is available
@@ -51,118 +61,73 @@ class Features:
         """
         return self.len
 
-    def __getitem__(self, item):
-        """ Get a feature by id
+    def __getitem__(self, item) -> dict:
+        """ Magic operator for getting a feature by id
         :param item: the feature id
+        :returns: (dict) the feature value
         """
-        if item in self.list_format:
-            return self.list_format[item]
-
-        else:
-            return None
-
-    @classmethod
-    def from_server_response(cls, interface: dict, response_features: dict):
-        """ Creates a feature object from the response features
-        :param interface: the interface
-        :param response_features: the dictionary from the server
-        :returns: (Features)
-        """
-
-        new_feature = Features(interface)
-
-        def inner(feature: Features, d: dict) -> dict:
-            """ Recursive inner method
-            :param feature: the new feature instance
-            :param d: one layer of features, will get modified
-            :returns: the new layer
-            """
-            # No .items() for reference
-            for feature_id in d.copy():
-                feature_value = d[feature_id]
-
-                print("Parsing", feature_id)
-
-                # Parse shorten keys
-                for old_key, new_key in feature.hash_table.copy():
-                    if old_key in feature_value:
-
-                        # Change key
-                        feature_value[new_key] = feature_value.pop(old_key)
-
-                    else:
-                        raise KeyError(f"missing {old_key}!")
-
-                # Parse also children
-                if feature_value["children"]:
-                    inner(feature, feature_value["children"])  # Works because it has a working reference
-
-            return d
-
-        print(inner(new_feature, response_features))
-
-        # # Iter through features, no items() to get a reference
-        # for feature_id, feature_value in old.items():
-        #     try:
-        #         new.update({feature_id: {}})
-        #
-        #         # Keeps track to make sure each mask item is available
-        #         needed = self.features_hash_table.copy()
-        #
-        #         # Through its shorten keys, eg 'a'
-        #         for shorten_key, new_name in feature_value.items():
-        #             new_value = {}
-        #
-        #             if shorten_key != "c":
-        #                 new_value = new_value
-        #
-        #             # Children
-        #             elif new_name:
-        #                 # Parse them
-        #                 parsed = self.parse_server_response(new_name)
-        #                 i += parsed[1]
-        #
-        #                 new_value = parsed[0]
-        #
-        #             new[feature_id].update({self.features_hash_table[shorten_key]: new_value})
-        #
-        #             del needed[shorten_key]
-        #
-        #         if needed:
-        #             raise Exception(f"Missing {needed}")
-        #
-        #         i += 1
-        #
-        #         # Add the reference
-        #         self.storage.features_ref.update({feature_id: feature_value})
-        #
-        #     # Couldn't load it
-        #     except Exception as e:
-        #         if feature_id in new:
-        #             del new[feature_id]
-        #
-        #         logger.logDebug(f"Could not load feature '{feature_value['n']}' -> {e.__class__.__name__} {e}")
-        #
-        #     logger.logDebug(f"Fetched feature '{feature_value['n']}'", add=True)
-        #
-        # return new, i
-
-    def generate_list_format(self):
-        """ Generates a list format
-        """
-
-        def inner(d: dict):
-            for feature_id, feature_value in self.child_format.items():
-                # do stuff
-
-                if feature_value["children"]:
-                    inner(feature_value["children"])
+        return self.data[item]
 
     @property
     def for_json(self) -> dict:
         """ Gives features ready for json parser
         """
-        return self.child_format
+        return self.data
+
+    @classmethod
+    def parse_shorten_keys(cls, features, response_features: dict):
+        """ Parses shorten keys, creates feature.keys (dict)
+        :param features: (Features) the new features instance
+        :param response_features: the response features unparsed
+        """
+        # No .items() for reference
+        for feature_id in response_features.copy():
+            feature_value = response_features[feature_id]
+
+            # Parse shorten keys, note: items makes a copy
+            for old_key, new_key in features.hash_table.items():
+                if old_key in feature_value:
+
+                    # Change key
+                    feature_value[new_key] = feature_value.pop(old_key)
+
+                else:
+                    raise KeyError(f"Key '{old_key}' is missing in response!")
+                
+            # Add the key to the keys
+            features.keys.update({feature_id: feature_value["key"]})
+
+        return response_features
+
+    @classmethod
+    def from_server_response(cls, interface: dict, response_features: dict):
+        """ Creates a feature object from the response features
+        :param interface: (dict) the interface
+        :param response_features: (dict) the dictionary from the server
+        :returns: (Features)
+        """
+        new_features = Features(interface)
+
+        # Parse
+        new_features.data = cls.parse_shorten_keys(new_features, response_features)
+        new_features.len = len(new_features.data)
+
+        return new_features
+
+    @classmethod
+    def from_storage_file(cls, interface: dict, storage_features: dict):
+        """ Creates a feature object from the storage files data
+        :param interface: (dict) the interface
+        :param storage_features: (dict) the dictionary from the storage
+        :returns: (Features)
+        """
+        new_features = Features(interface)
+
+        # Parse
+        new_features.data = storage_features
+        new_features.len = len(new_features.data)
+
+        return new_features
 
 
 class Storage:
@@ -173,17 +138,16 @@ class Storage:
         "api": "http://127.0.0.1:5000/api/",
         "mc_version": "",
         "features": {
-            # 0: {
+            # 0: { TODO update comment template
             #     "name": "FOV",
             #     "available": True,
             #     "enabled": True,
             #     "key": "v",
             #     "offsets": [12, 12],
             #     "help": "https",
-            #     "children": {}
+            #     "children": []
             # },
         },
-        "features_len": 0,
         "settings": {
             "start_cooldown": 5000
         }
@@ -195,31 +159,40 @@ class Storage:
         """
         self.interface = interface
 
-        self._data_ = None
+        # Stored
+        self.data = None
         self.features = None
 
+        # Load data
         try:
             with open(self.STORAGE_PATH, "a+") as f:
                 # Using a+ instead of w+ because it doesn't truncate
                 f.seek(0)
 
-                # If is written read, else write
+                # If is written read, else write default
                 if f.read() != "":
                     f.seek(0)
-                    self._data_ = json.load(f)
+                    self.data = json.load(f)
 
                     # Validate
-                    if not self.validate(self._data_, self.DEFAULT_TEMPLATE):
+                    if not self.validate(self.data, self.DEFAULT_TEMPLATE):
                         raise json.JSONDecodeError
 
                 else:
                     f.seek(0)
-                    json.dump(self.DEFAULT_TEMPLATE, f, indent=4)  # TODO invalid json handler
-                    self._data_ = self.DEFAULT_TEMPLATE
+                    json.dump(self.DEFAULT_TEMPLATE, f, indent=4)
+                    self.data = self.DEFAULT_TEMPLATE
 
-        except json.JSONDecodeError:
-            ui.queueQuitMessage(self.interface, "Invalid storage file! Please delete it!", "Fatal Error")
+        except (json.JSONDecodeError, FileNotFoundError):
+            ui.queueQuitMessage(self.interface, "Invalid storage file! Please correct or delete it!", "Fatal Error")
 
+        # If needed, parse old features
+        if self.data["features"]:
+            self.features = Features.from_storage_file(self.interface, self.data["features"])
+            logger.logDebug("Loading stored features!")
+
+        # Finish and add to the interface
+        self.interface.update({"Storage": self})
         logger.logDebug("Storage", add=True)
 
     def validate(self, given: dict, check: dict) -> bool:
@@ -243,17 +216,17 @@ class Storage:
         :param name: the name
         :param value: the value
         """
-        self._data_[name] = value
+        self.data[name] = value
 
     def get(self, name: str):
         """ Getter
         :param name: the name
         """
-        return self._data_[name]
+        return self.data[name]
 
     def updateFile(self):
         """ Update file content
         """
         with open(self.STORAGE_PATH, "w+") as f:
             f.seek(0)
-            json.dump(self._data_, f, indent=4)
+            json.dump(self.data, f, indent=4)

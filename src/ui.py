@@ -1,4 +1,5 @@
-import sys
+""" UI stuff, uses tkinter for the GUI 5"""
+
 import webbrowser
 import threading
 import tkinter as tk
@@ -12,8 +13,8 @@ from src import logger
 
 
 def queueAlertMessage(interface: dict, msg: str, *, warning=False):
-    """ Add a alert message to the queue
-    :param interface: interface
+    """ Add a alert message to the root thread queue
+    :param interface: (dict) interface
     :param msg: (str) the message
     :param warning: (bool) if it is a warning
     :returns: (int) the time if it is a message
@@ -23,8 +24,8 @@ def queueAlertMessage(interface: dict, msg: str, *, warning=False):
 
 
 def queueAskQuestion(interface: dict, msg: str, title: str, callback):
-    """ Add a popup message to the queue
-    :param interface: interface
+    """ Add a popup message to the root thread queue
+    :param interface: (dict) interface
     :param msg: (str) the message
     :param title: (str) the title
     :param callback: the callback function
@@ -36,7 +37,7 @@ def queueAskQuestion(interface: dict, msg: str, title: str, callback):
 
 
 def queueQuitMessage(interface: dict, msg: str, title: str):
-    """ Add a popup error to the queue and then close the application
+    """ Add a popup error to the root queue queue and then close the application (SystemTray.stopTray)
     :param interface: interface
     :param msg: (str) the message
     :param title: (str) the title
@@ -48,7 +49,7 @@ def queueQuitMessage(interface: dict, msg: str, title: str):
 
 
 class RootThread(threading.Thread):
-    """ The thread for the gui
+    """ The thread for the gui (tkinter)
     """
 
     def __init__(self, interface: dict):
@@ -58,23 +59,23 @@ class RootThread(threading.Thread):
         super().__init__(name=self.__class__.__name__)
         self.interface = interface
 
+        # Queue for executing methods inside the thread
+        self.queue = []
+
+        # The root window (tkinter.TK)
+        self.root = None
+
         # Add thread to interface
         self.interface.update({"RootThread": self})
 
-        self.queue = []
-        self.root = None
-
     def run(self) -> None:
-        """ Run method
+        """ Run method of thread
         """
         logger.logDebug("Root Thread", add=True)
 
-        # Create root
+        # Initialize root and start the queue update
         self.root = Root(self.interface)
         self.root.queueUpdate()
-
-        # Add to interface
-        self.interface.update({"Root": self.root})
 
         # Start mainloop
         logger.logDebug("Root Gui", add=True)
@@ -85,7 +86,7 @@ class RootThread(threading.Thread):
 
 
 class Root(tk.Tk):
-    """ The root of the application, is the GUI and a Thread
+    """ The root window of the application
     """
 
     def __init__(self, interface):
@@ -95,14 +96,14 @@ class Root(tk.Tk):
         super().__init__()
         self.interface = interface
 
-        # Setting up
+        # Setting up tk stuff
         self.title("FOV Changer")
         self.protocol("WM_DELETE_WINDOW", self.withdraw)
         self.resizable(False, False)
         self.geometry("800x400")
         self.tk.call('wm', 'iconphoto', self._w, ImageTk.PhotoImage(Image.open("logo.ico")))
 
-        # Style
+        # Ttk style
         self.style = ttk.Style()
         self.font = "Sans Serif"
 
@@ -133,11 +134,15 @@ class Root(tk.Tk):
 
         # Cache
         self.cache = {
-            "validate": ""
+            "validate": "",  # On entry key validate
+            "space": None   # Space between features
         }
 
         # Todo delete
         self.var = None
+
+        # Add to interface
+        self.interface.update({"Root": self})
 
     def queueUpdate(self):
         """ Run every 200 ms a new task from the queue
@@ -310,10 +315,10 @@ class Root(tk.Tk):
         notebook.add(log_frame, text="Log")
         notebook.add(help_frame, text="Info")
 
-        # If there are features
-        if (features := self.interface["Storage"].get("features")) and (
-                features_len := self.interface["Storage"].get("features_len")):
-            self.var = self.createTabFeature(features, features_len)
+        # If there are features, render them
+        if features := self.interface["Storage"].features:
+            self.interface["Storage"].features.tk_vars = self.createTabFeature(features)
+            logger.logDebug("Rendered Features!")
 
         # or just make a placeholder
         else:
@@ -323,20 +328,23 @@ class Root(tk.Tk):
                                                       font=(self.font, 12), fg="#3A606E")
             self.feature_frame_placeholder.place(relx=.5, y=100, anchor="center")
 
-    def createTabFeature(self, features: dict, features_len: int) -> dict:
+    def createTabFeature(self, features) -> dict:
         """ Creates the Tab feature
             Own Method to make it better to read
-        :param features: (dict) the features to render
-        :param features_len: (int) how many features there are + children
+        :param features: (Features) the features object
         :returns: (dict) payload with the tk variables
         """
+        # Remove placeholder
+        if self.feature_frame_placeholder:
+            self.feature_frame_placeholder.place_forget()
+
         # Calculate y padding, if cached, then use cached
-        if "space" in self.cache:
+        if "space" in self.cache and self.cache["space"]:
             space = self.cache["space"]
 
         else:
             space = round((self.feature_frame.winfo_height() - tkf.Font(font=(self.font, 13)).metrics(
-                "linespace") * features_len) / (features_len + 2))
+                "linespace") * features.len) / (features.len + 2))
             self.cache.update({"space": space})
 
         # Vars for return
@@ -354,7 +362,7 @@ class Root(tk.Tk):
             extra_column = int(child)
 
             # Payload which gets merged into the main payload
-            _payload = {"enabled": tk.IntVar(), "key": tk.StringVar(), "children": {}}
+            _payload = {"enabled": tk.IntVar(), "key": tk.StringVar(), "value": []}
 
             # Enable Button + Label
             enable_button = ttk.Checkbutton(self.feature_frame, text=f"   {feature['name']}",
@@ -404,19 +412,21 @@ class Root(tk.Tk):
 
         # Iter through features
         i = 0
-        for key, f in features.items():
-            payload.update({key: render(f, key, i)})
+        done = set()
+        for key, f in features.data.items():
+            if key not in done:
+                payload.update({key: render(f, key, i)})
+                done.add(key)
 
-            # If there are children
-            if "children" in f:
+                i += 1
+
                 # Create each child
-                for c in f["children"]:
-                    i += 1
-                    payload.update({c: render(f["children"][c], c, i, child=True)})
+                if f["children"]:
+                    for child_key in f["children"]:
+                        payload.update({key: render(features.data[child_key], child_key, i, child=True)})
+                        done.add(child_key)
 
-            i += 1
-
-        # Finish toplevel manager
+                        i += 1
 
         return payload
 
@@ -432,8 +442,8 @@ class Root(tk.Tk):
 
         self.cache["validate"] = p
 
-        # Save
-        print(p)
+        # TODO Save
+        print(p, "TODO")
 
         # Validation
         if len(p) > 1:

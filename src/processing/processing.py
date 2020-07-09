@@ -1,3 +1,5 @@
+""" All things that can block or lag the UI etc. """
+
 import os
 import threading
 import time
@@ -11,7 +13,7 @@ from src.processing import storage, listener
 
 
 class ProcessingThread(threading.Thread):
-    """ The Processing Thread is for the processing and storage etc
+    """ The Processing Thread is for the processing and storage etc.
     """
 
     def __init__(self, interface: dict):
@@ -21,37 +23,35 @@ class ProcessingThread(threading.Thread):
         super().__init__(name=self.__class__.__name__)
         self.interface = interface
 
-        # Add thread to interface
-        self.interface.update({"ProcessingThread": self})
-
         # Components
         self.storage = None
-        self.network = None
         self.gateway = None
+        self.network = None
 
-        self.running = True
+        # Queue
+        self.running = False
         self.queue = []
+
+        # Add thread to interface
+        self.interface.update({"ProcessingThread": self})
 
     def run(self) -> None:
         """ Run method
         """
         logger.logDebug("ProcessingThread", add=True)
 
-        # Create basic ui
+        # Create basic ui to be able to display events
         self.interface["RootThread"].queue.append(
             {"cmd": "createWidgets", "params": [True], "kwargs": {}})
 
         # Initialize storage
         self.storage = storage.Storage(self.interface)
-        self.interface.update({"Storage": self.storage})
 
         # Initialize network
         self.network = network.Network(self.interface)
-        self.interface.update({"Network": self.network})
 
         # Initialize gateway
         self.gateway = Gateway(self.interface)
-        self.interface.update({"Gateway": self.gateway})
 
         # Initialize listener
         # self.listener = listener.Listener(self.storage, self.gateway)
@@ -69,6 +69,8 @@ class ProcessingThread(threading.Thread):
                 {"cmd": "createSetup", "params": [self.authenticationCallback.__name__], "kwargs": {}})
 
         # Loop
+        self.running = True
+
         while self.running:
             if self.queue:
                 task = self.queue.pop(0)
@@ -116,15 +118,18 @@ class ProcessingThread(threading.Thread):
             # Attach
             if (var := root.start_button_var).get() == "Start":
                 self.gateway.open_process_from_name("Minecraft.Windows.exe")
+                self.gateway.statusCheck()
                 logger.logDebug("Attached to Minecraft!")
 
                 # Version check
-                if not self.gateway.checkVersion() or not self.storage.get("features"):
+                if not self.gateway.checkVersion() or not self.storage.get("features") or not self.storage.features:
+                    logger.logDebug("New feature offsets are needed!")
+
                     # Fetch features, if it succeeded
                     if self.network.fetchFeatures(self.gateway.current_mc_version):
                         # Create if it isn't already created
                         self.interface["RootThread"].queue.append(
-                            {"cmd": "createNotebook", "params": [], "kwargs": {}})
+                            {"cmd": "createTabFeature", "params": [self.storage.features], "kwargs": {}})
 
                     # If something went wrong
                     else:
@@ -135,7 +140,7 @@ class ProcessingThread(threading.Thread):
                         return
 
                 # Get addresses
-                if not self.gateway.addresses:
+                if not self.storage.features.addresses:
                     self.gateway.getAddresses()
 
                 # Change start button
@@ -175,13 +180,15 @@ class Gateway(pymem.Pymem):
         }
 
         self.current_mc_version = None
-        self.addresses = {}
 
-    def getAddress(self, feature_id: str, feature: dict):
+        # Finish
+        self.interface.update({"Gateway": self})
+
+    def getAddress(self, feature_id: str):
         """ Get one address
         :param feature_id: the id of the following feature
-        :param feature: the feature
         """
+        feature = self.storage.features[feature_id]
         offs = feature["offsets"]
 
         try:
@@ -191,8 +198,7 @@ class Gateway(pymem.Pymem):
             for offset in offs[1:-1]:
                 temp = RemotePointer(self.process_handle, temp.value + offset)
 
-            self.addresses.update({feature_id: {"address": temp.value + offs[-1], "value": feature["value"],
-                                                "name": feature["name"]}})
+            self.storage.features.addresses.update({feature_id: temp.value + offs[-1]})
             status = True
 
             logger.logDebug(f"Found address for {feature['name']}!", add=True)
@@ -208,17 +214,21 @@ class Gateway(pymem.Pymem):
     def getAddresses(self):
         """ Get the features from the pointers
         """
+        done = set()
+        for feature_id, value in self.storage.features.data.items():
+            if feature_id not in done:
 
-        def inner(features):
-            """ Recursive inner method
-            """
-            for feature_id, value in features.items():
-                self.getAddress(feature_id, value)
+                self.getAddress(feature_id)
+                done.add(feature_id)
+
+                # Update none values (use the current in-game value instead)
+                self.storage.features.tk_vars
 
                 if value["children"]:
-                    inner(value["children"])
+                    for child_key in value["children"]:
 
-        inner(self.storage.get("features"))
+                        self.getAddress(child_key)
+                        done.add(child_key)
 
         self.statusCheck()
 
@@ -232,12 +242,15 @@ class Gateway(pymem.Pymem):
         self.status["Version"] = bool(self.current_mc_version == self.storage.get("mc_version"))
 
         # Addresses
-        for addr_id, value in self.addresses.items():
+        for addr_id, addr_value in self.storage.features.addresses.items():
+            feature = self.storage.features[addr_id]
+
             try:
-                getattr(self, f"read_{value['value'][0]}")(value["address"])
+                getattr(self, f"read_{feature['value'][0]}")(addr_value)
 
             except pymem.exception.MemoryReadError:
-                self.status[value["name"]] = False
+                logger.logDebug(f"{feature['name']} is unavailable!", add=False)
+                self.status[feature["name"]] = False
 
         # Update ui
         self.interface["RootThread"].queue.append(
@@ -269,8 +282,8 @@ class Gateway(pymem.Pymem):
 
         # When they aren't equal, update needed
         if self.current_mc_version != saved_mc_version:
-            logger.logDebug("New offsets are needed")
+            logger.logDebug("Saved version doesn't match!")
             return False
 
-        logger.logDebug("Offsets up to date!")
+        logger.logDebug("Saved version matches!")
         return True
