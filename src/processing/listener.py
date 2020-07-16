@@ -1,7 +1,8 @@
 import pymem
 from pynput import keyboard
 
-from src.util import *
+from src import ui
+from src.logger import Logger
 
 
 class Listener(keyboard.Listener):
@@ -9,7 +10,7 @@ class Listener(keyboard.Listener):
     """
 
     def __init__(self, interface):
-        """ Handles keyboard input
+        """ Interface
         :param interface: the interface
         """
         super().__init__(
@@ -18,11 +19,15 @@ class Listener(keyboard.Listener):
         )
         self.interface = interface
 
+        # References
         self.gateway = interface["Gateway"]
         self.storage = interface["Storage"]
-
         self.features = self.storage.features
+
+        self.keys = {}
         self.pressed = {}
+
+        self.interface.update({"Listener": self})
 
     @staticmethod
     def unctrl(c: int) -> str:
@@ -36,41 +41,77 @@ class Listener(keyboard.Listener):
         else:
             return chr(c)
 
-    def on_press(self, key: keyboard.KeyCode):
-        """ On press event
-        :param key: the key code
+    def register_keys(self):
+        """ Register keys
+        """
+        done = set()
+        self.keys = {}
+
+        for feature_id, feature_value in self.features.data.items():
+
+            # Duplicates
+            if feature_id not in done and feature_value["key"]:
+                feature_id_list = (list(feature_id) if feature_value["available"] else []) + \
+                                  [x for x in feature_value["children"] if self.features[x]["available"]]
+
+                done.update(feature_id_list)
+
+                # Already exists?
+                if feature_value["key"] in self.keys:
+                    self.keys[feature_value["key"].lower()].extend(feature_id_list)
+
+                else:
+                    self.keys.update({feature_value["key"].lower(): feature_id_list})
+
+    def inner(self, key, index: int, on_press: bool):
+        """ To shorten up code, for register_keys
+        :param key: key from pynput
+        :param index: new value index
+        :param on_press: (bool) if from on press
         """
         # Normalize the key code
         if isinstance(key, keyboard.KeyCode):
             code = self.unctrl(key.vk).lower()
 
-            # Valid key exists?
-            if code in self.storage.keys:
+            # Key exists?
+            if code in self.keys:
 
                 # First press?
-                if code not in self.pressed or not self.pressed[code]:
-                    self.pressed.update({code: True})
+                if (code in self.pressed) is not on_press or self.pressed[code] is not on_press:
+                    self.pressed.update({code: on_press})
 
-                    feature_id = self.features.keys[code]
-                    feature_value = self.features[feature_id]
+                    # Do memory stuff
+                    for feature_id in self.keys[code]:
+                        feature_value = self.features[feature_id]
 
-                    getattr(self, f"read_{feature_value['value'][0]}")(self.features[feature_id],
-                                                                       feature_value['value'][1])
+                        # Enabled?
+                        if not feature_value["enabled"]:
+                            continue
+
+                        try:
+                            self.gateway.write_address(feature_id, feature_value["value"][index])
+
+                        # Minecraft was closed
+                        except pymem.exception.MemoryWriteError:
+                            self.gateway.close_process()
+                            self.gateway.status_check()
+
+                            # Alert user
+                            Logger.log("Minecraft was closed!")
+                            ui.queue_alert_message(self.interface, "Minecraft was closed!", warning=True)
+                            self.interface["Root"].bell()
+                            self.interface["Root"].start_button_var.set("Start")
+
+                            return self.stop()
+
+    def on_press(self, key: keyboard.KeyCode):
+        """ On press event
+        :param key: the key code
+        """
+        self.inner(key, 1, True)
 
     def on_release(self, key: keyboard.KeyCode):
         """ On release event
         :param key: the key code
         """
-        try:
-            if isinstance(key, keyboard.KeyCode):
-                # Normalize
-                code = self.unctrl(key.vk).lower()
-
-                print(ord(code), ord(self.zoom_key))
-
-                if code == self.zoom_key:
-                    self.pm.write_float(self.pm.fov_address, self.pm.normal_fov)
-                    self.pressed = False
-
-        except pymem.exception.MemoryWriteError:
-            errorMSG("Minecraft Bedrock was closed! or Something else went wrong!")
+        self.inner(key, 0, False)

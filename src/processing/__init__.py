@@ -3,4 +3,3 @@ and more!
 """
 
 from src.processing.processing import Gateway
-from src.processing.status import Status

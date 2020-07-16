@@ -1,4 +1,7 @@
+""" Handles verifying and fetching things out from an external service """
+
 import base64
+import binascii
 import json
 import zlib
 
@@ -6,8 +9,10 @@ import requests
 import licensing.models as models
 import licensing.methods as methods
 
-from src import logger, ui
+from src import ui
+from src.logger import Logger
 from src.processing import storage
+from src.exceptions import MessageHandlingError
 
 
 def list_data_objects_to_key(token, product_id, key, *, contains="", v=1):
@@ -28,17 +33,6 @@ def list_data_objects_to_key(token, product_id, key, *, contains="", v=1):
     return requests.get("https://app.cryptolens.io/api/data/ListDataObjectsToKey", params=params).json()
 
 
-class ErrorHandlingException(Exception):
-    """ A exception to pass its message on in network passed situations
-    """
-
-    def __init__(self, message):
-        """ Initialize
-        :param message: the error message
-        """
-        self.message = message
-
-
 class Network:
     """ Handles authentication, fetching and api based stuff
     """
@@ -51,20 +45,24 @@ class Network:
 
         self.storage = interface["Storage"]
 
-        self.product_id = 6345
+        # Cryptolens
+        self.product_id = 6973
         self.pub_key = "<RSAKeyValue><Modulus>41jDl8UXM1e8OZKduBL7EGaP3ibCOPMGOKOG57vIfK0pSPgsY014IbO7RZCtiEpUjra2TTaQO7" \
                        "+mCrIkx2P2RNTZ2z5rDbkb7/Plaso/fJN/L8qu71Ohc3sXZKo299Qz6Z2wZ7FiaXVqi5gtg9HsLqjTzihpWs7LNjo" \
                        "+El125LBVp63H3Q83ivq43jYObPk8hY+zcRJOIKLlQY1akAtKWegTzmvtOc3Ydwgg4m9pof/21pfy" \
                        "/7JzaSY2NP4bLbSLu404QTMdtR6tspYgHpDZyzgXtNXezDiEASfqbkkrGn8e2ZRpjsNsHJlyH7UXH7mV06S00gcW/ne+3gH1dFXH2Q" \
                        "==</Modulus><Exponent>AQAB</Exponent></RSAKeyValue>"
-        self.activate_token = "WyIyMjg5NCIsIjFaNzBHeGRFUVpqenhVNlJKMGQzMzhjQ0hsNHVmOHpHRXhtSTl1MXoiXQ=="
-        self.data_obj_token = "WyIyMjk1NSIsIkVwakpIU2FjRVgxeEpQOWxheE1HcjBvbzZaeHFOU3NGcFZmdTZQOHYiXQ=="
+        self.activate_token = "WyIzOTY0MCIsImwyVXc1U0IyLzNiV1dBMm5NS0x4NlVCbmZEcm5DU2pLMkRhbFVEMFciXQ=="
+        self.data_obj_token = "WyIzOTY0MyIsIjNQbVRtM3U1bmZJcTlOMGMwZ0FaSEdJcEZGOThhZkZvT2ZJeU5Yb2wiXQ=="
+
+        # Used to access certain endpoints
         self.api_key = ""
 
+        # License
         self.license_key = ""
         self.license_obj = None
 
-        # Finish
+        # Add to interface
         self.interface.update({"Network": self})
 
     def authenticate(self, license_key: str) -> tuple:
@@ -78,22 +76,22 @@ class Network:
                                     floating_time_interval=300, max_overdraft=0)
 
         # Check if key is valid
-        if not self.checkKeyObject(resp[0]):
-            logger.logDebug("Invalid license!")
+        if not self.check_key_object(resp[0]):
+            Logger.log("Invalid license!")
 
             return False, resp[1] if isinstance(resp[1], str) else "Wrong machine!"
 
         else:
-            logger.logDebug("Authenticated license!")
+            Logger.log("Authenticated license!")
 
-            # Save license object
+            # Save license object and license to file
             self.license_obj = resp[0]
-            self.saveKey(self.license_obj)
+            self.save_key(self.license_obj)
 
             return True, ""
 
     @staticmethod
-    def checkKeyObject(license_obj: models.LicenseKey) -> bool:
+    def check_key_object(license_obj: models.LicenseKey) -> bool:
         """ Checks if a key is valid, own method, because it is used at several locations
         :param license_obj: (LicenseKey) a license key object
         """
@@ -103,13 +101,13 @@ class Network:
 
         return True
 
-    def isValidKey(self) -> bool:
+    def is_valid_key(self) -> bool:
         """ Tests if a valid key is saved, if saved, self.license_obj gets updated
         :returns: (tuple) success boolean
         """
-        license_obj = self.getKey()
+        license_obj = self.get_key()
 
-        if self.checkKeyObject(license_obj):
+        if self.check_key_object(license_obj):
             self.license_obj = license_obj
             self.license_key = self.license_obj.key
 
@@ -118,14 +116,14 @@ class Network:
         return False
 
     @staticmethod
-    def saveKey(license_obj: models.LicenseKey):
+    def save_key(license_obj: models.LicenseKey):
         """ Saves the license to a file
         :param license_obj: (LicenseKey) license key object
         """
         with open(storage.find_file("LICENSE_KEY"), "w+") as f:
             f.write(license_obj.save_as_string())
 
-    def getKey(self) -> models.LicenseKey:
+    def get_key(self) -> models.LicenseKey:
         """ Gets license from file, valid for 30 days
         :returns: (LicenseKey) a license key object
         """
@@ -135,7 +133,7 @@ class Network:
 
         return license_obj
 
-    def generateNewApiKey(self):
+    def generate_new_api_key(self):
         """ Generates a new api key, server stores it in a data object
         :raises: a exception for invalid status codes
         """
@@ -143,71 +141,82 @@ class Network:
 
         # Server fail
         if resp.status_code != 200:
-            raise ErrorHandlingException("Couldn't fetch a new api key!")
+            raise MessageHandlingError("Couldn't fetch a new api key!")
 
         status_code = resp.json()["status"]
 
         # Api key not expired, but got to this method, so try again later
         if status_code == 409:
-            logger.logDebug(resp.json()["message"])
-            raise ErrorHandlingException("Please try it later again!")
+            Logger.log(resp.json()["message"])
+            raise MessageHandlingError("Please try it later again!")
 
         # Success
         elif status_code == 200:
-            logger.logDebug("New api key generated!")
+            Logger.log("New api key generated!")
 
         else:
-            logger.logDebug(resp.json()["message"])
-            raise ErrorHandlingException("Couldn't fetch a new api key!")
+            Logger.log(resp.json()["message"])
+            raise MessageHandlingError("Couldn't fetch a new api key!")
 
-    def fetchApiKey(self) -> any:
+    def fetch_api_key(self) -> bool:
         """ Retrieves api key from the data object
-        :returns: the response
         """
         data = list_data_objects_to_key(self.data_obj_token, self.product_id, self.license_key)
-        self.api_key = [x for x in data["dataObjects"] if x["name"] == "api_key"][0]["stringValue"]
+        self.api_key = [x for x in data["dataObjects"] if x["name"] == "api_key"]
 
-    def fetchFeatures(self, current_version: str) -> bool:
+        if self.api_key:
+            self.api_key = self.api_key[0]["stringValue"]
+            return True
+
+        else:
+            self.generate_new_api_key()
+            return False
+
+    def fetch_features(self, current_version: str) -> bool:
         """ Fetch the data from the api
         :param current_version: current mc version
         :returns: if succeed
         """
         version_id = "".join(current_version.split("."))
-        logger.logDebug(f"Getting features for '{version_id}'")
-
-        # Api key wasn't fetched before
-        if not self.api_key:
-            self.fetchApiKey()
-            logger.logDebug(f"Fetched api key")
+        Logger.log(f"Getting features for '{version_id}'")
 
         # Retry certain times
         data = None
         tries = 0
         while tries <= 3:
             try:
+
+                # Api key wasn't fetched before
+                if not self.api_key:
+                    if not self.fetch_api_key():
+                        tries += 1
+                        continue
+
+                    Logger.log(f"Fetched api key")
+
                 resp = requests.get(f"{self.storage.get('api')}offsets/{version_id}", params={"api_key": self.api_key})
-                logger.logDebug(f"Feature request number {tries}")
+                Logger.log(f"Feature request number {tries}")
 
                 # Too many request
                 if resp.status_code == 429:
-                    raise ErrorHandlingException("Exceeded rate limit!")
+                    raise MessageHandlingError("Exceeded rate limit!")
 
                 # Server fail
                 elif resp.status_code != 200:
-                    raise ErrorHandlingException("Couldn't communicate with the server!")
+                    raise MessageHandlingError("Couldn't communicate with the server!")
 
                 data = resp.json()
                 status_code = data["status"]
 
                 # Forbidden, new api key needed
                 if status_code == 440:
-                    logger.logDebug(f"New api key needed!")
-                    self.generateNewApiKey()
-                    self.fetchApiKey()
+                    Logger.log(f"New api key needed!")
+                    self.generate_new_api_key()
+                    self.fetch_api_key()
 
                 # Not found, there are no offsets for that version
                 elif status_code == 404:
-                    raise ErrorHandlingException("Minecraft version is unsupported!")
+                    raise MessageHandlingError("Minecraft version is unsupported!")
 
                 # Success
                 elif status_code == 200:
@@ -215,45 +224,47 @@ class Network:
 
                 # Else, something went wrong
                 else:
-                    raise ErrorHandlingException("Couldn't fetch new offsets!")
+                    raise MessageHandlingError("Couldn't fetch new offsets!")
 
             except requests.exceptions.ConnectionError:
                 pass
 
             # Alert message
-            except ErrorHandlingException as e:
-                logger.logDebug(e.message)
-                ui.queueAlertMessage(self.interface, e.message, warning=True)
+            except MessageHandlingError as e:
+                Logger.log(e.message)
+                ui.queue_alert_message(self.interface, e.message, warning=True)
                 return False
 
             tries += 1
 
         if not data:
-            logger.logDebug("Couldn't communicate with the server!")
-            ui.queueAlertMessage(self.interface, "Couldn't communicate with the server!", warning=True)
+            Logger.log("Couldn't communicate with the server!")
+            ui.queue_alert_message(self.interface, "Couldn't communicate with the server!", warning=True)
             return False
 
         else:
-            # Decompress
+            # Decompress and parse
             try:
                 offs = json.loads(zlib.decompress(base64.b64decode(data["offsets"].encode("utf8"))).decode("utf8"))
 
                 # Parse server response
-                self.storage.features = storage.Features.from_server_response(self.interface, offs)
+                self.storage.features = storage.Features.from_server_response(self.interface, offs, saved_features=self.storage.features if self.storage.features else None)
 
-            except json.JSONDecodeError:
-                logger.logDebug("Invalid offsets!")
-                ui.queueAlertMessage(self.interface, "Invalid offsets!", warning=True)
+            except (json.JSONDecodeError, binascii.Error):
+                Logger.log("Invalid response from server!")
+                ui.queue_alert_message(self.interface, "Invalid response from server!", warning=True)
                 return False
 
-            except KeyError as e:
-                logger.logDebug(str(e))
-                ui.queueAlertMessage(self.interface, "Invalid offsets!", warning=True)
+            except MessageHandlingError as e:
+                Logger.log(e.message)
+                ui.queue_alert_message(self.interface, "Invalid offsets!", warning=True)
                 return False
 
             self.storage.set("features", self.storage.features.for_json)
             self.storage.set("mc_version", current_version)
-            self.storage.updateFile()
+            self.storage.ready = True
 
-            logger.logDebug("Saved new features and version")
+            self.storage.update_file()
+
+            Logger.log("Saved new features and version")
             return True

@@ -1,5 +1,4 @@
 """ UI stuff, uses tkinter for the GUI 5"""
-
 import webbrowser
 import threading
 import tkinter as tk
@@ -9,10 +8,13 @@ from tkinter import simpledialog, messagebox
 
 from PIL import Image, ImageTk
 
-from src import logger
+from run import VERSION
+from src import exceptions
+from src.processing import storage
+from src.logger import Logger
 
 
-def queueAlertMessage(interface: dict, msg: str, *, warning=False):
+def queue_alert_message(interface: dict, msg: str, *, warning=False):
     """ Add a alert message to the root thread queue
     :param interface: (dict) interface
     :param msg: (str) the message
@@ -23,7 +25,7 @@ def queueAlertMessage(interface: dict, msg: str, *, warning=False):
         {"cmd": "alert", "params": ["msg", msg], "kwargs": {"warning": warning}, "wait": True})
 
 
-def queueAskQuestion(interface: dict, msg: str, title: str, callback):
+def queue_ask_question(interface: dict, msg: str, title: str, callback):
     """ Add a popup message to the root thread queue
     :param interface: (dict) interface
     :param msg: (str) the message
@@ -36,7 +38,7 @@ def queueAskQuestion(interface: dict, msg: str, title: str, callback):
          "callback": callback})
 
 
-def queueQuitMessage(interface: dict, msg: str, title: str):
+def queue_quit_message(interface: dict, msg: str, title: str):
     """ Add a popup error to the root queue queue and then close the application (SystemTray.stopTray)
     :param interface: interface
     :param msg: (str) the message
@@ -45,7 +47,7 @@ def queueQuitMessage(interface: dict, msg: str, title: str):
     """
     interface["RootThread"].queue.append(
         {"cmd": "alert", "params": ["popup", msg], "kwargs": {"ask": False, "title": title}, "wait": False,
-         "callback": interface["SystemTray"].stopTray})
+         "callback": interface["SystemTray"].stop_tray})
 
 
 class RootThread(threading.Thread):
@@ -71,18 +73,23 @@ class RootThread(threading.Thread):
     def run(self) -> None:
         """ Run method of thread
         """
-        logger.logDebug("Root Thread", add=True)
+        try:
+            Logger.log("Root Thread", add=True)
 
-        # Initialize root and start the queue update
-        self.root = Root(self.interface)
-        self.root.queueUpdate()
+            # Initialize root and start the queue update
+            self.root = Root(self.interface)
+            self.root.queue_update()
 
-        # Start mainloop
-        logger.logDebug("Root Gui", add=True)
-        self.root.mainloop()
-        logger.logDebug("Root Gui", add=False)
+            # Start mainloop
+            Logger.log("Root Gui", add=True)
+            self.root.mainloop()
+            Logger.log("Root Gui", add=False)
 
-        logger.logDebug("Root Thread", add=False)
+            Logger.log("Root Thread", add=False)
+
+        # If something happens, log it
+        except Exception as e:
+            exceptions.handle(self.interface)
 
 
 class Root(tk.Tk):
@@ -96,12 +103,18 @@ class Root(tk.Tk):
         super().__init__()
         self.interface = interface
 
+        self.storage = None
+
         # Setting up tk stuff
         self.title("FOV Changer")
-        self.protocol("WM_DELETE_WINDOW", self.withdraw)
+        self.protocol("WM_DELETE_WINDOW", self.hide)
         self.resizable(False, False)
         self.geometry("800x400")
-        self.tk.call('wm', 'iconphoto', self._w, ImageTk.PhotoImage(Image.open("logo.ico")))
+        self.tk.call('wm', 'iconphoto', self._w,
+                     ImageTk.PhotoImage(Image.open(storage.find_file("logo.ico", meipass=True))))
+
+        # Used inside the queue_update()
+        self.rendered = False
 
         # Ttk style
         self.style = ttk.Style()
@@ -114,6 +127,10 @@ class Root(tk.Tk):
         self.feature_frame = None
         self.feature_frame_placeholder = None
         self.start_button = None
+        self.settings_frame = None
+        self.log_frame = None
+        self.log_text = None
+        self.info_frame = None
 
         # TextVariables
         self.start_button_var = tk.StringVar()
@@ -135,30 +152,52 @@ class Root(tk.Tk):
         # Cache
         self.cache = {
             "validate": "",  # On entry key validate
-            "space": None   # Space between features
+            "space": None  # Space between features
         }
 
-        # Todo delete
-        self.var = None
+        # As long there isn't any content, show waiting cursor
+        self.config(cursor="wait")
 
         # Add to interface
         self.interface.update({"Root": self})
 
-    def queueUpdate(self):
+    def hide(self):
+        """ Hides the root (withdraws it)
+        """
+        self.withdraw()
+        self.feature_edit_manager.hide_all()
+        self.interface["Storage"].update_file()
+
+    def queue_update(self):
         """ Run every 200 ms a new task from the queue
             E.g. {"cmd": "alert", "params":["msg", "hey"], "kwargs":{}, wait=True, callback=print}}
         """
         try:
             task = self.interface["RootThread"].queue.pop(0)
-            t = getattr(self, task["cmd"])(*task["params"], **task["kwargs"])
 
-            # If there is no wait
-            if "wait" not in task or not task["wait"]:
+            # If it should wait to be rendered
+            if "wait_for_render" in task and task["wait_for_render"] and not self.rendered:
+                self.interface["RootThread"].queue.append(task)
+
                 t = 0
 
-            # Check if there is a callback
-            if "callback" in task:
-                task["callback"](t)
+            else:
+                if "attr" not in task or task["attr"]:
+                    t = getattr(self, task["cmd"])(*task["params"], **task["kwargs"])
+
+                elif not task["attr"]:
+                    t = task["cmd"](*task["params"], **task["kwargs"])
+
+                else:
+                    t = 0
+
+                # If there is no wait
+                if "wait" not in task or not task["wait"]:
+                    t = 0
+
+                # Check if there is a callback
+                if "callback" in task:
+                    task["callback"](t)
 
         except IndexError:
             # No tasks
@@ -168,12 +207,15 @@ class Root(tk.Tk):
         if not isinstance(t, int):
             t = 2500
 
-        self.after(500 + t, self.queueUpdate)
+        # Update logs
+        if Logger.queue:
+            Logger.write_all()
 
-    def createWidgets(self, content: bool):
+        self.after(500 + t, self.queue_update)
+
+    def create_widgets(self):
         """ Create all widgets
             https://coolors.co/3a606e-607b7d-828e82-aaae8e-e0e0e0
-        :param content: (bool) if content should be created
         """
         # Create style
         # Thanks to https://stackoverflow.com/a/23399786/11940809 and more
@@ -199,11 +241,13 @@ class Root(tk.Tk):
         header_frame.grid(column=0, row=0, columnspan=4, sticky="WE")
 
         # Logo
-        self.logo_image = ImageTk.PhotoImage(Image.open("res\\logo-full.png").resize((80, 80), Image.ANTIALIAS))
+        self.logo_image = ImageTk.PhotoImage(
+            Image.open(storage.find_file("res\\logo-full.png", meipass=True)).resize((80, 80), Image.ANTIALIAS))
         tk.Label(header_frame, image=self.logo_image, borderwidth=0).pack(side="right", padx=3)
 
         # Title
-        self.title_image = ImageTk.PhotoImage(Image.open("res\\logo-title.png").resize((280, 70), Image.ANTIALIAS))
+        self.title_image = ImageTk.PhotoImage(
+            Image.open(storage.find_file("res\\logo-title.png", meipass=True)).resize((280, 70), Image.ANTIALIAS))
         tk.Label(header_frame, image=self.title_image, borderwidth=0).pack(side="right", padx=6)
 
         # Notification
@@ -211,7 +255,7 @@ class Root(tk.Tk):
         self.notification_label = tk.Label(self.notification_frame, bg="#E0E0E0", fg="#E0E0E0",
                                            textvariable=self.notification_message, font=(self.font, 14))
 
-    def createSetup(self, callback: str):
+    def create_setup(self, callback: str):
         """ Create the setup for asking the user for the license (AUTHENTICATION)
         :param callback: (str) method name which gets added to the processing queue
         """
@@ -228,14 +272,20 @@ class Root(tk.Tk):
 
         key_button = ttk.Button(self.setup_frame, text="Authenticate", takefocus=False)
         key_button.bind("<Button-1>", lambda e: self.interface["ProcessingThread"].queue.append(
-            {"cmd": callback, "params": [self.setup_key_entry_var.get()], "kwargs": {}}
+            {"cmd": callback, "params": [self.setup_key_entry_var.get().strip()], "kwargs": {}}
         ))
         key_button.place(relx=.7, y=200, anchor="center")
 
-    def createContent(self):
+        # Return to default cursor
+        self.config(cursor="arrow")
+
+    def create_content(self):
         """ Sub create from createWidgets, initializes the content
             Will also create notebook
         """
+        # Add storage
+        self.storage = self.interface["Storage"]
+
         # Destroy old frame
         if self.setup_frame:
             self.setup_frame.destroy()
@@ -250,7 +300,7 @@ class Root(tk.Tk):
         self.start_button = tk.Button(start_button_wrapper, text="", font=(self.font, 11),
                                       takefocus=False, relief="flat", borderwidth=0, textvariable=self.start_button_var)
         start_button_cmd = lambda e: self.interface["ProcessingThread"].queue.append(
-            {"cmd": "startButtonHandle", "params": [e], "kwargs": {}}
+            {"cmd": "start_button_handle", "params": [e], "kwargs": {}}
         )
         self.start_button.bind("<Button-1>", start_button_cmd)
         self.bind("<Return>", start_button_cmd)
@@ -264,15 +314,21 @@ class Root(tk.Tk):
         self.status_frame.columnconfigure(1, weight=1)
         self.status_frame.rowconfigure(1, weight=1)
 
-        self.renderStatus(self.interface["Gateway"].status)
+        self.render_status(self.interface["Gateway"].status)
 
         # Separator
         tk.Frame(self.main_frame, bg="#3A606E").grid(column=2, row=1, sticky="WENS", ipadx=3)
 
         # Notebook
-        self.createNotebook()
+        self.create_notebook()
 
-    def renderStatus(self, status: dict):
+        # Return to default cursor
+        self.config(cursor="arrow")
+
+        # Update
+        self.rendered = True
+
+    def render_status(self, status: dict):
         """ Render a status
         :param status: the status
         """
@@ -293,8 +349,8 @@ class Root(tk.Tk):
 
         self.update()
 
-    def createNotebook(self):
-        """ The notebook which contains settings and more is inside the content
+    def create_notebook(self):
+        """ The notebook which contains settings and more is
             Gets execute in createContent
         """
         notebook = ttk.Notebook(self.main_frame, width=600, takefocus=False)
@@ -302,23 +358,24 @@ class Root(tk.Tk):
 
         # Create instances
         self.feature_frame = tk.Frame(notebook)
-        settings_frame = tk.Frame(notebook)
-        log_frame = tk.Frame(notebook)
-        help_frame = tk.Frame(notebook)
+        self.settings_frame = tk.Frame(notebook)
+        self.log_frame = tk.Frame(notebook)
+        self.info_frame = tk.Frame(notebook)
 
         # Update to get height
         self.update()
 
         # Add them before to be then able to calculate the height
         notebook.add(self.feature_frame, text="Features")
-        notebook.add(settings_frame, text="Settings")
-        notebook.add(log_frame, text="Log")
-        notebook.add(help_frame, text="Info")
+        notebook.add(self.settings_frame, text="Settings")
+        notebook.add(self.log_frame, text="Log")
+        notebook.add(self.info_frame, text="Info")
 
+        # Notebook Features
         # If there are features, render them
-        if features := self.interface["Storage"].features:
-            self.interface["Storage"].features.tk_vars = self.createTabFeature(features)
-            logger.logDebug("Rendered Features!")
+        if features := self.storage.features:
+            self.create_tab_features(features)
+            Logger.log("Rendered Features!")
 
         # or just make a placeholder
         else:
@@ -328,24 +385,28 @@ class Root(tk.Tk):
                                                       font=(self.font, 12), fg="#3A606E")
             self.feature_frame_placeholder.place(relx=.5, y=100, anchor="center")
 
-    def createTabFeature(self, features) -> dict:
-        """ Creates the Tab feature
+        # Notebook Settings
+        self.storage.settings_tk_vars = self.create_tab_settings()
+
+        # Notebook Log
+        self.create_tab_log()
+
+        # Notebook Info
+        self.create_tab_info()
+
+    def create_tab_features(self, features):
+        """ Creates the Tab features + tk_vars
             Own Method to make it better to read
         :param features: (Features) the features object
-        :returns: (dict) payload with the tk variables
         """
         # Remove placeholder
         if self.feature_frame_placeholder:
             self.feature_frame_placeholder.place_forget()
 
-        # Calculate y padding, if cached, then use cached
-        if "space" in self.cache and self.cache["space"]:
-            space = self.cache["space"]
-
-        else:
-            space = round((self.feature_frame.winfo_height() - tkf.Font(font=(self.font, 13)).metrics(
-                "linespace") * features.len) / (features.len + 2))
-            self.cache.update({"space": space})
+        # Calculate y padding
+        space = round((self.feature_frame.winfo_height() - tkf.Font(font=(self.font, 13)).metrics(
+            "linespace") * features.len) / (features.len + 2))
+        self.cache.update({"features_space": space})
 
         # Vars for return
         payload = {}
@@ -367,8 +428,10 @@ class Root(tk.Tk):
             # Enable Button + Label
             enable_button = ttk.Checkbutton(self.feature_frame, text=f"   {feature['name']}",
                                             variable=_payload["enabled"], cursor="hand2")
+            enable_button.bind("<Button-1>",
+                               lambda e: self.on_feature_check_button(feature_id, _payload["enabled"].get()))
             enable_button.grid(column=extra_column, row=i, sticky="w", padx=30, pady=pad_y)
-            _payload["enabled"].set(feature["enabled"])
+            _payload["enabled"].set(feature["enabled"] if feature["enabled"] is not None else False)
 
             # Entry for the key bind
             if not child:
@@ -378,7 +441,7 @@ class Root(tk.Tk):
                 _payload["key"].set(feature["key"])
 
                 # Validation
-                proc = entry.register(lambda p: self.onFeatureValidate(feature_id, p))
+                proc = entry.register(lambda p: self.on_feature_entry_validate(feature_id, p))
                 entry.configure(validate="key", validatecommand=(proc, "%P"))
 
             else:
@@ -387,26 +450,31 @@ class Root(tk.Tk):
                 _payload["key"] = None
 
             # Edit Button
-            edit_button_wrapper = tk.Frame(self.feature_frame, width=96, height=29)
+            edit_button_wrapper = tk.Frame(self.feature_frame, width=96, height=29, cursor="hand2")
             edit_button_wrapper.pack_propagate(0)
             edit_button = ttk.Button(edit_button_wrapper, text="Edit", takefocus=False)
-            edit_button.bind("<Button-1>", lambda e: self.feature_edit_manager.openFeature(feature_id))
+            edit_button.bind("<Button-1>", lambda e: self.feature_edit_manager.open_feature(feature_id))
             edit_button.pack(fill="both")
             edit_button_wrapper.grid(column=2, row=i, sticky="w", padx=30, pady=pad_y)
-            
-            self.feature_edit_manager.addFeature(feature_id, feature)
 
             # If needed, disable
             if not feature["available"]:
                 enable_button.state(["disabled"])
+                edit_button.state(["disabled"])
+
+                _payload["enabled"].set(False)
 
                 if entry:
                     entry.state(["disabled"])
 
+            else:
+                # Top level for edit button
+                self.feature_edit_manager.add_feature(feature_id, feature, _payload)
+
             # Help url
             url = tk.Label(self.feature_frame, text="?", font=(self.font, 13), fg="#3A606E", cursor="hand2")
             url.grid(column=3, row=i, sticky="w", padx=10, pady=pad_y)
-            url.bind("<Button-1>", lambda e: webbrowser.open(feature["help"], new=2))
+            url.bind("<Button-1>", lambda e: webbrowser.open(self.storage.get("features_help_url").format(feature_id), new=2))
 
             return _payload
 
@@ -423,35 +491,189 @@ class Root(tk.Tk):
                 # Create each child
                 if f["children"]:
                     for child_key in f["children"]:
-                        payload.update({key: render(features.data[child_key], child_key, i, child=True)})
+                        payload.update({child_key: render(features.data[child_key], child_key, i, child=True)})
                         done.add(child_key)
 
                         i += 1
 
-        return payload
+        del done
 
-    def onFeatureValidate(self, feature_id, p):
+        self.storage.features.tk_vars = payload
+
+    def create_tab_settings(self):
+        """ Displays the settings
+        """
+        settings = self.storage.get("settings")
+        settings_url = self.storage.get("settings_help_url")
+
+        # Calculate y padding
+        length = len(settings) + 1
+        space = round((self.feature_frame.winfo_height() - tkf.Font(font=(self.font, 13)).metrics(
+            "linespace") * length) / (length + 2))
+
+        def render(setting_name: str, setting_value: any, i: int):
+            """ Render a setting
+            :param setting_name: (str) name of setting
+            :param setting_value: (any) value of setting
+            :param i: (int) index
+            """
+            pad_y = space if i % 2 == 0 else 0
+
+            tk_var = None
+
+            # Text
+            tk.Label(self.settings_frame, text=" ".join(x[0].upper() + x[1:] for x in setting_name.split("_")),
+                     font=(self.font, 13)) \
+                .grid(column=0, row=i, padx=30, pady=pad_y, sticky="e")
+
+            # User input
+            # Bool -> check button
+            if isinstance(setting_value, bool):
+                tk_var = tk.IntVar()
+
+                setting_input = ttk.Checkbutton(self.settings_frame, takefocus=False, variable=tk_var)
+                setting_input.grid(column=1, row=i, padx=10, pady=pad_y, sticky="w")
+
+            # Else
+            else:
+                tk_var = tk.StringVar()
+
+                setting_input = ttk.Entry(self.settings_frame, font=(self.font, 12), justify="left",
+                                          textvariable=tk_var,
+                                          takefocus=False)
+                setting_input.grid(column=1, row=i, padx=10, pady=pad_y, sticky="w")
+
+            tk_var.set(setting_value)
+
+            # Help url
+            url = tk.Label(self.settings_frame, text="?", font=(self.font, 13), fg="#3A606E", cursor="hand2")
+            url.grid(column=3, row=i, sticky="e", padx=50, pady=space if i % 2 == 0 else 0)
+            url.bind("<Button-1>", lambda e: webbrowser.open(settings_url.format(setting_name), new=2))
+
+            return tk_var
+
+        tk_vars = {}
+
+        i = 0
+        for name, value in settings.items():
+            tk_vars.update({name: render(name, value, i)})
+            i += 1
+
+        # Create save button + help button
+        save_button = ttk.Button(self.settings_frame, text="Save", takefocus=False,
+                                 command=self.on_settings_save_button)
+        save_button.grid(column=1, row=i, padx=10, pady=space if i % 2 == 0 else 0, sticky="ew")
+
+        return tk_vars
+
+    def create_tab_log(self):
+        """ Creates the tab log, show logger messages
+            Replacement for normal console
+        """
+        # "Border" for log messages
+        inner_frame = tk.Frame(self.log_frame)
+        inner_frame.pack(fill="both", padx=0, pady=20)
+
+        # Scrollbar for text
+        scrollbar = ttk.Scrollbar(inner_frame)
+        scrollbar.pack(side="right", fill="y")
+
+        # Log text
+        self.log_text = tk.Text(inner_frame, height=400, yscrollcommand=scrollbar.set, relief="flat", borderwidth=12,
+                                font=("Consolas", 13), bg="#121212", fg="#ffffff", state="disabled")
+        self.log_text.pack(side="top", fill="y")
+
+        scrollbar.config(command=self.log_text.yview)
+
+    def create_tab_info(self):
+        """ Provides information about the current version, author and more
+        """
+        tk.Label(self.info_frame, text="Made by XroixHD", font=(self.font, 13)) \
+            .pack(padx=50, pady=30)
+
+        ttk.Button(self.info_frame, text="GitHub", takefocus=False,
+                   command=lambda: webbrowser.open("https://github.com/XroixHD", new=2)) \
+            .pack(padx=50, pady=10)
+
+        ttk.Button(self.info_frame, text="YouTube", takefocus=False,
+                   command=lambda: webbrowser.open("https://www.youtube.com/channel/UC4dNeoE7POOYMelEV8w-zQg", new=2)) \
+            .pack(padx=50, pady=0)
+
+        ttk.Button(self.info_frame, text="Discord", takefocus=False,
+                   command=lambda: webbrowser.open("https://discord.com/invite/fF3NKpM", new=2)) \
+            .pack(padx=50, pady=10)
+
+        tk.Label(self.info_frame, text=f"v{VERSION}", font=("Consolas", 13)) \
+            .pack(padx=50, pady=10)
+
+    def on_feature_entry_validate(self, feature_id: str, p: str):
         """ On validation of a feature key entry
-        :param feature_id: if of the feature
-        :param p: %P => content
+        :param feature_id: (str) if of the feature
+        :param p: (str) %P => content
         """
         # Cache
-        if p == self.cache["validate"]:
+        if (p != "" and p == self.cache["validate"]) or len(p) > 1:
             self.bell()
             return False
 
         self.cache["validate"] = p
 
-        # TODO Save
-        print(p, "TODO")
+        # Change feature + prepare storage for update queue + register keys in listener new
+        self.storage.features[feature_id]["key"] = p[0] if p else ""
+        with self.storage.edited_lock:
+            self.storage.edited = True
 
-        # Validation
-        if len(p) > 1:
-            self.bell()
-            return False
+        with self.storage.listener_keys_edited_lock:
+            self.storage.listener_keys_edited = True
 
-        else:
-            return True
+        return True
+
+    def on_feature_check_button(self, feature_id: str, state):
+        """ On click of a feature check button
+        :param feature_id: (str)  if of the feature
+        :param state: state of the button
+        """
+        feature_value = self.storage.features[feature_id]
+
+        if feature_value["available"]:
+
+            # Reverse it because it's needed + save it
+            feature_value["enabled"] = not state
+            with self.storage.edited_lock:
+                self.storage.edited = True
+
+            # Update status
+            if feature_value["name"] in self.interface["Gateway"].status:
+                # print(bool(state if state else None))
+                # print(state)
+                # print(self.interface["Gateway"].status)
+                # self.interface["Gateway"].status[feature_value["name"]] = state if state else None
+                self.interface["ProcessingThread"].queue.append(
+                    {"cmd": self.interface["Gateway"].status_check, "params": [], "kwargs": {}, "attr": False})
+
+    def on_settings_save_button(self):
+        """ Save settings
+        """
+        if self.storage.settings_tk_vars:
+            settings = self.storage.get("settings")
+
+            for name, value in self.storage.settings_tk_vars.items():
+                try:
+                    # Try to cast
+                    value = type(settings[name])(value.get())
+
+                    # Set new value
+                    settings[name] = value
+
+                except ValueError:
+                    Logger.log(msg := f"Invalid value for {' '.join(x[0].upper() + x[1:] for x in name.split('_'))}")
+                    queue_alert_message(self.interface, msg, warning=True)
+                    return
+
+            Logger.log("Saved new settings!")
+            queue_alert_message(self.interface, "Saved new settings!")
+
+        self.storage.update_file()
 
     def alert(self, mode: str, msg: str, *, warning=False, ask=False, title="Untitled") -> any:
         """ Alert a message or a popup
@@ -509,10 +731,13 @@ class FeatureEditManager:
         # Settings
         self.interface = interface
         self.root = root
+        self.storage = self.interface["Storage"]
 
         # TopLevels
         self.top_levels = {}
-        self.top_levels_vars = {}
+
+        # Fix bug
+        self.open = False
 
     def position(self, feature_id):
         """ Position a top level
@@ -520,35 +745,42 @@ class FeatureEditManager:
         """
         self.top_levels[feature_id].geometry(f"300x150+{self.root.winfo_x()}+{self.root.winfo_y()}")
 
-    def addFeature(self, feature_id: str, feature: dict):
+    def add_feature(self, feature_id: str, feature: dict, payload: dict):
         """ Add features
-        :param feature_id: the if of the feature
-        :param feature: the feature
+        :param feature_id: (str) the if of the feature
+        :param feature: (dict) the feature
+        :param payload: (dict) the payload
         """
         if feature_id not in self.top_levels:
             # Create Top Level
             top = tk.Toplevel(self.root)
             top.withdraw()
             top.title(feature["name"])
-            top.tk.call('wm', 'iconphoto', top._w, ImageTk.PhotoImage(Image.open("logo.ico")))
+            top.tk.call('wm', 'iconphoto', top._w,
+                        ImageTk.PhotoImage(Image.open(storage.find_file("logo.ico", meipass=True))))
             top.geometry(f"300x150+{self.root.winfo_x()}+{self.root.winfo_y()}")
             top.resizable(False, False)
+            top.protocol("WM_DELETE_WINDOW", lambda: (self.hide(feature_id)))
+            # top.bind("<Return>", lambda e: self.save(feature_id))
 
             # Content
             # tk.Label(top, text=feature["name"], font=(self.root.font, 18), fg="#3A606E")\
             #     .place(relx=.5, y=40, anchor="center")
 
             before = tk.StringVar()
-            before.set("test")
+            before.set(str(temp if (temp := feature["value"][0]) else ""))
+            payload["value"].append(before)
+
             after = tk.StringVar()
-            after.set("test")
+            after.set(str(temp if (temp := feature["value"][1]) else ""))
+            payload["value"].append(after)
 
             # Before
             before_wrapper = tk.Frame(top, height=29, width=70)
             before_wrapper.place(relx=.3, rely=.3, anchor="center")
             before_wrapper.pack_propagate(0)
             ttk.Entry(before_wrapper, font=(self.root.font, 12), justify="center",
-                      textvariable=before)\
+                      textvariable=before) \
                 .pack(fill="both")
 
             # Middle
@@ -559,7 +791,8 @@ class FeatureEditManager:
             after_wrapper = tk.Frame(top, height=29, width=70)
             after_wrapper.place(relx=.7, rely=.3, anchor="center")
             after_wrapper.pack_propagate(0)
-            ttk.Entry(after_wrapper, font=(self.root.font, 12), justify="center")\
+            ttk.Entry(after_wrapper, font=(self.root.font, 12), justify="center",
+                      textvariable=after) \
                 .pack(fill="both")
 
             # Save
@@ -571,31 +804,66 @@ class FeatureEditManager:
 
             # Add it
             self.top_levels.update({feature_id: top})
-            self.top_levels_vars.update({feature_id: {"before": before, "after": after}})
 
-    def openFeature(self, feature_id: str):
+    def open_feature(self, feature_id: str):
         """ Open a specific feature top level
         :param feature_id: the if of the feature
         """
-        self.top_levels[feature_id].deiconify()
+        if not self.open and self.storage.features[feature_id]["available"]:
+            self.top_levels[feature_id].deiconify()
+            self.top_levels[feature_id].grab_set()
+            self.position(feature_id)
+
+            self.open = True
 
     def save(self, feature_id: str):
         """ Click event for save button
         :param feature_id: the id of the feature
         """
-        # Hide window
-        self.top_levels[feature_id].withdraw()
+        if self.open:
+            # Hide window
+            self.top_levels[feature_id].withdraw()
+            self.top_levels[feature_id].grab_release()
 
-        # Save new values
-        # self.interface["Storage"].get("value")
+            # Get some values to clean up code
+            feature = self.storage.features[feature_id]
+            tk_var = self.storage.features.tk_vars[feature_id]["value"]
+            presets = self.storage.features.presets[feature_id]
 
+            values = [x.get() for x in tk_var]
 
-class FeatureEditTopLevel(tk.Toplevel):
-    """ The top level for a feature edit
-    """
+            # Save new values into the real value field and check type
+            # Also translate the value if needed
+            if self.storage.features.check_value(self.storage.features, feature_id, feature, override_value=values):
+                feature["value"] = values
+                self.interface["Storage"].update_file()
 
-    def __init__(self):
-        """ Initialize
+                Logger.log(f"Saved new values! [{' -> '.join(values)}]")
+                # queue_alert_message(self.interface, "Saved new values!")
+
+            # Reset from real saved value
+            else:
+                Logger.log(f"Invalid value entered! [{' -> '.join(values)}]")
+                queue_alert_message(self.interface, "Invalid value entered!", warning=True)
+                tk_var[0].set(str(temp if (temp := feature["value"][0]) else ""))
+                tk_var[1].set(str(temp if (temp := feature["value"][1]) else ""))
+
+            self.open = False
+
+    def hide(self, feature_id: str):
+        """ Hide a top level, like save() but without saving stuff
+        :param feature_id: the id of the feature
         """
-        super().__init__()
-        self.title()
+        if self.open:
+            # Hide window
+            self.top_levels[feature_id].withdraw()
+            self.top_levels[feature_id].grab_release()
+
+            self.open = False
+
+    def hide_all(self):
+        """ Hides / Withdraws all top levels
+        """
+        for top_level_obj in self.top_levels.values():
+            top_level_obj.withdraw()
+            top_level_obj.grab_release()
