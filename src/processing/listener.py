@@ -9,25 +9,25 @@ class Listener(keyboard.Listener):
     """ Listener for key events
     """
 
-    def __init__(self, interface):
-        """ Interface
-        :param interface: the interface
+    def __init__(self, references):
+        """ references
+        :param references: the references
         """
         super().__init__(
             on_press=self.on_press,
             on_release=self.on_release
         )
-        self.interface = interface
+        self.references = references
 
         # References
-        self.gateway = interface["Gateway"]
-        self.storage = interface["Storage"]
+        self.gateway = references["Gateway"]
+        self.storage = references["Storage"]
         self.features = self.storage.features
 
         self.keys = {}
         self.pressed = {}
 
-        self.interface.update({"Listener": self})
+        self.references.update({"Listener": self})
 
     @staticmethod
     def unctrl(c: int) -> str:
@@ -98,9 +98,9 @@ class Listener(keyboard.Listener):
 
                             # Alert user
                             Logger.log("Minecraft was closed!")
-                            ui.queue_alert_message(self.interface, "Minecraft was closed!", warning=True)
-                            self.interface["Root"].bell()
-                            self.interface["Root"].start_button_var.set("Start")
+                            ui.queue_alert_message(self.references, "Minecraft was closed!", warning=True)
+                            self.references["Root"].bell()
+                            self.references["Root"].start_button_var.set("Start")
 
                             return self.stop()
 

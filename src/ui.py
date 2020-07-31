@@ -14,52 +14,52 @@ from src.processing import storage
 from src.logger import Logger
 
 
-def queue_alert_message(interface: dict, msg: str, *, warning=False):
+def queue_alert_message(references: dict, msg: str, *, warning=False):
     """ Add a alert message to the root thread queue
-    :param interface: (dict) interface
+    :param references: (dict) references
     :param msg: (str) the message
     :param warning: (bool) if it is a warning
     :returns: (int) the time if it is a message
     """
-    interface["RootThread"].queue.append(
+    references["RootThread"].queue.append(
         {"cmd": "alert", "params": ["msg", msg], "kwargs": {"warning": warning}, "wait": True})
 
 
-def queue_ask_question(interface: dict, msg: str, title: str, callback):
+def queue_ask_question(references: dict, msg: str, title: str, callback):
     """ Add a popup message to the root thread queue
-    :param interface: (dict) interface
+    :param references: (dict) references
     :param msg: (str) the message
     :param title: (str) the title
     :param callback: the callback function
     :returns: (int) the time if it is a message
     """
-    interface["RootThread"].queue.append(
+    references["RootThread"].queue.append(
         {"cmd": "alert", "params": ["popup", msg], "kwargs": {"ask": True, "title": title}, "wait": True,
          "callback": callback})
 
 
-def queue_quit_message(interface: dict, msg: str, title: str):
+def queue_quit_message(references: dict, msg: str, title: str):
     """ Add a popup error to the root queue queue and then close the application (SystemTray.stopTray)
-    :param interface: interface
+    :param references: references
     :param msg: (str) the message
     :param title: (str) the title
     :returns: (int) the time if it is a message
     """
-    interface["RootThread"].queue.append(
+    references["RootThread"].queue.append(
         {"cmd": "alert", "params": ["popup", msg], "kwargs": {"ask": False, "title": title}, "wait": False,
-         "callback": interface["SystemTray"].stop_tray})
+         "callback": references["SystemTray"].stop_tray})
 
 
 class RootThread(threading.Thread):
     """ The thread for the gui (tkinter)
     """
 
-    def __init__(self, interface: dict):
+    def __init__(self, references: dict):
         """ Initialize
-        :param interface: interface
+        :param references: references
         """
         super().__init__(name=self.__class__.__name__)
-        self.interface = interface
+        self.references = references
 
         # Queue for executing methods inside the thread
         self.queue = []
@@ -67,8 +67,8 @@ class RootThread(threading.Thread):
         # The root window (tkinter.TK)
         self.root = None
 
-        # Add thread to interface
-        self.interface.update({"RootThread": self})
+        # Add thread to references
+        self.references.update({"RootThread": self})
 
     def run(self) -> None:
         """ Run method of thread
@@ -77,7 +77,7 @@ class RootThread(threading.Thread):
             Logger.log("Root Thread", add=True)
 
             # Initialize root and start the queue update
-            self.root = Root(self.interface)
+            self.root = Root(self.references)
             self.root.queue_update()
 
             # Start mainloop
@@ -89,19 +89,19 @@ class RootThread(threading.Thread):
 
         # If something happens, log it
         except Exception as e:
-            exceptions.handle(self.interface)
+            exceptions.handle(self.references)
 
 
 class Root(tk.Tk):
     """ The root window of the application
     """
 
-    def __init__(self, interface):
+    def __init__(self, references):
         """ Initialize
-        :param interface: interface
+        :param references: references
         """
         super().__init__()
-        self.interface = interface
+        self.references = references
 
         self.storage = None
 
@@ -109,7 +109,7 @@ class Root(tk.Tk):
         self.title("FOV Changer")
         self.protocol("WM_DELETE_WINDOW", self.hide)
         self.resizable(False, False)
-        self.geometry("800x400")
+        self.geometry("800x410")
         self.tk.call('wm', 'iconphoto', self._w,
                      ImageTk.PhotoImage(Image.open(storage.find_file("logo.ico", meipass=True))))
 
@@ -147,7 +147,7 @@ class Root(tk.Tk):
         self.notification_message = tk.StringVar()
 
         # TopLevels
-        self.feature_edit_manager = FeatureEditManager(self.interface, self)
+        self.feature_edit_manager = FeatureEditManager(self.references, self)
 
         # Cache
         self.cache = {
@@ -158,26 +158,26 @@ class Root(tk.Tk):
         # As long there isn't any content, show waiting cursor
         self.config(cursor="wait")
 
-        # Add to interface
-        self.interface.update({"Root": self})
+        # Add to references
+        self.references.update({"Root": self})
 
     def hide(self):
         """ Hides the root (withdraws it)
         """
         self.withdraw()
         self.feature_edit_manager.hide_all()
-        self.interface["Storage"].update_file()
+        self.references["Storage"].update_file()
 
     def queue_update(self):
         """ Run every 200 ms a new task from the queue
             E.g. {"cmd": "alert", "params":["msg", "hey"], "kwargs":{}, wait=True, callback=print}}
         """
         try:
-            task = self.interface["RootThread"].queue.pop(0)
+            task = self.references["RootThread"].queue.pop(0)
 
             # If it should wait to be rendered
             if "wait_for_render" in task and task["wait_for_render"] and not self.rendered:
-                self.interface["RootThread"].queue.append(task)
+                self.references["RootThread"].queue.append(task)
 
                 t = 0
 
@@ -271,7 +271,7 @@ class Root(tk.Tk):
         key_entry.place(relx=.4, y=200, anchor="center")
 
         key_button = ttk.Button(self.setup_frame, text="Authenticate", takefocus=False)
-        key_button.bind("<Button-1>", lambda e: self.interface["ProcessingThread"].queue.append(
+        key_button.bind("<Button-1>", lambda e: self.references["ProcessingThread"].queue.append(
             {"cmd": callback, "params": [self.setup_key_entry_var.get().strip()], "kwargs": {}}
         ))
         key_button.place(relx=.7, y=200, anchor="center")
@@ -284,7 +284,7 @@ class Root(tk.Tk):
             Will also create notebook
         """
         # Add storage
-        self.storage = self.interface["Storage"]
+        self.storage = self.references["Storage"]
 
         # Destroy old frame
         if self.setup_frame:
@@ -299,7 +299,7 @@ class Root(tk.Tk):
                                         cursor="hand2")
         self.start_button = tk.Button(start_button_wrapper, text="", font=(self.font, 11),
                                       takefocus=False, relief="flat", borderwidth=0, textvariable=self.start_button_var)
-        start_button_cmd = lambda e: self.interface["ProcessingThread"].queue.append(
+        start_button_cmd = lambda e: self.references["ProcessingThread"].queue.append(
             {"cmd": "start_button_handle", "params": [e], "kwargs": {}}
         )
         self.start_button.bind("<Button-1>", start_button_cmd)
@@ -314,7 +314,7 @@ class Root(tk.Tk):
         self.status_frame.columnconfigure(1, weight=1)
         self.status_frame.rowconfigure(1, weight=1)
 
-        self.render_status(self.interface["Gateway"].status)
+        self.render_status(self.references["Gateway"].status)
 
         # Separator
         tk.Frame(self.main_frame, bg="#3A606E").grid(column=2, row=1, sticky="WENS", ipadx=3)
@@ -643,13 +643,13 @@ class Root(tk.Tk):
                 self.storage.edited = True
 
             # Update status
-            if feature_value["name"] in self.interface["Gateway"].status:
+            if feature_value["name"] in self.references["Gateway"].status:
                 # print(bool(state if state else None))
                 # print(state)
-                # print(self.interface["Gateway"].status)
-                # self.interface["Gateway"].status[feature_value["name"]] = state if state else None
-                self.interface["ProcessingThread"].queue.append(
-                    {"cmd": self.interface["Gateway"].status_check, "params": [], "kwargs": {}, "attr": False})
+                # print(self.references["Gateway"].status)
+                # self.references["Gateway"].status[feature_value["name"]] = state if state else None
+                self.references["ProcessingThread"].queue.append(
+                    {"cmd": self.references["Gateway"].status_check, "params": [], "kwargs": {}, "attr": False})
 
     def on_settings_save_button(self):
         """ Save settings
@@ -667,11 +667,11 @@ class Root(tk.Tk):
 
                 except ValueError:
                     Logger.log(msg := f"Invalid value for {' '.join(x[0].upper() + x[1:] for x in name.split('_'))}")
-                    queue_alert_message(self.interface, msg, warning=True)
+                    queue_alert_message(self.references, msg, warning=True)
                     return
 
             Logger.log("Saved new settings!")
-            queue_alert_message(self.interface, "Saved new settings!")
+            queue_alert_message(self.references, "Saved new settings!")
 
         self.storage.update_file()
 
@@ -723,15 +723,15 @@ class FeatureEditManager:
     """ Manages the feature edit top levels
     """
 
-    def __init__(self, interface: dict, root: tk.Tk):
+    def __init__(self, references: dict, root: tk.Tk):
         """ Initialize
-        :param interface: the interface
+        :param references: the references
         :param root: the root
         """
         # Settings
-        self.interface = interface
+        self.references = references
         self.root = root
-        self.storage = self.interface["Storage"]
+        self.storage = self.references["Storage"]
 
         # TopLevels
         self.top_levels = {}
@@ -836,15 +836,15 @@ class FeatureEditManager:
             # Also translate the value if needed
             if self.storage.features.check_value(self.storage.features, feature_id, feature, override_value=values):
                 feature["value"] = values
-                self.interface["Storage"].update_file()
+                self.references["Storage"].update_file()
 
                 Logger.log(f"Saved new values! [{' -> '.join(values)}]")
-                # queue_alert_message(self.interface, "Saved new values!")
+                # queue_alert_message(self.references, "Saved new values!")
 
             # Reset from real saved value
             else:
                 Logger.log(f"Invalid value entered! [{' -> '.join(values)}]")
-                queue_alert_message(self.interface, "Invalid value entered!", warning=True)
+                queue_alert_message(self.references, "Invalid value entered!", warning=True)
                 tk_var[0].set(str(temp if (temp := feature["value"][0]) else ""))
                 tk_var[1].set(str(temp if (temp := feature["value"][1]) else ""))
 

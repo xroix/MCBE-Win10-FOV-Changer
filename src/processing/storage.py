@@ -43,12 +43,12 @@ class Features:
     """ Handles features so that they are available in many formats
     """
 
-    def __init__(self, interface: dict):
+    def __init__(self, references: dict):
         """ Initialize
-        :param interface: the interface
+        :param references: the references
         """
-        self.interface = interface
-        self.storage = interface["Storage"]
+        self.references = references
+        self.storage = references["Storage"]
 
         # Features
         self.data = {}
@@ -73,13 +73,14 @@ class Features:
         # hard code some things for the features
         self.presets = {
             "0": {  # FOV
-                "n": "FOV",
-                "k": "v",
-                "v_type": "float",
-                "v_default": [None, "30"],
-                "v_check": lambda values: all(not x or (29 < float(x) < 111) for x in values),
-                "v_decode": lambda new: round(new),
-                "c": ["1", "2"]
+                "type": "keystroke",
+                "n": "FOV",  # Name
+                "k": "v",  # Key
+                "v_type": "float",  # Value Type
+                "v_default": [None, "30"],  # Value Default Value
+                "v_check": lambda values: all(not x or (29 < float(x) < 111) for x in values),  # Value check method
+                "v_decode": lambda new: round(new),  # Value decode method for reading (encode for writing)
+                "c": ["1", "2"]  # Children
 
             },
             "1": {  # Hide Hand
@@ -98,6 +99,13 @@ class Features:
                 "v_check": lambda values: all(not x or (0 <= float(x) <= 100) for x in values),
                 "v_encode": lambda old: 6873.479 + (3.000883e-7 - 6873.479)/(1 + (old/235581800)**0.6125547),
                 "v_decode": lambda new: round(5331739 + (0.00002094196 - 5331739)/(1 + (new/674.5356)**1.632673)),
+                "c": []
+            },
+            "3": {
+                "n": "Rich Presence",
+                "k": None,
+                "v_type": "int",
+                "v_ignore": True,
                 "c": []
             }
         }
@@ -129,8 +137,13 @@ class Features:
         :param override_value: (list) new values
         :returns: (bool) if succeed
         """
-        values = feature_value["value"] if not override_value else override_value
         presets = features.presets[feature_id]
+
+        # If to ignore (rpc)
+        if "v_ignore" in presets and presets["v_ignore"]:
+            return True
+
+        values = feature_value["value"] if not override_value else override_value
 
         try:
             # Check value type
@@ -214,14 +227,14 @@ class Features:
         return old_features
 
     @classmethod
-    def from_server_response(cls, interface: dict, response_features: dict, *, saved_features=None):
+    def from_server_response(cls, references: dict, response_features: dict, *, saved_features=None):
         """ Creates a feature object from the response features
-        :param interface: (dict) the interface
+        :param references: (dict) the references
         :param response_features: (dict) the dictionary from the server
         :param saved_features: (dict) old saved features from eg old version
         :returns: (Features)
         """
-        new_features = Features(interface)
+        new_features = Features(references)
 
         # Parse
         new_features.data = cls.parse_features(new_features, response_features, shorten_keys=True, saved_features=saved_features)
@@ -230,13 +243,13 @@ class Features:
         return new_features
 
     @classmethod
-    def from_storage_file(cls, interface: dict, storage_features: dict):
+    def from_storage_file(cls, references: dict, storage_features: dict):
         """ Creates a feature object from the storage files data
-        :param interface: (dict) the interface
+        :param references: (dict) the references
         :param storage_features: (dict) the dictionary from the storage
         :returns: (Features)
         """
-        new_features = Features(interface)
+        new_features = Features(references)
 
         # Parse
         new_features.data = cls.parse_features(new_features, storage_features, shorten_keys=False)
@@ -246,7 +259,7 @@ class Features:
 
 
 class Storage:
-    """ Interface to the storage.json file
+    """ references to the storage.json file
     """
     STORAGE_PATH = find_file("res\\storage.json")
     DEFAULT_TEMPLATE = {
@@ -264,11 +277,11 @@ class Storage:
         }
     }
 
-    def __init__(self, interface):
+    def __init__(self, references):
         """ Initialize
-        :param interface: the interface
+        :param references: the references
         """
-        self.interface = interface
+        self.references = references
 
         # Stored
         self.data = None
@@ -307,36 +320,36 @@ class Storage:
                     self.data = self.DEFAULT_TEMPLATE
 
         except (json.JSONDecodeError, FileNotFoundError):
-            ui.queue_quit_message(self.interface, "Invalid storage file! Please correct or delete it!", "Fatal Error")
+            ui.queue_quit_message(self.references, "Invalid storage file! Please correct or delete it!", "Fatal Error")
 
-            # Add to the interface
-            self.interface.update({"Storage": self})
+            # Add to the references
+            self.references.update({"Storage": self})
 
             return
 
-        # Add to the interface
-        self.interface.update({"Storage": self})
+        # Add to the references
+        self.references.update({"Storage": self})
 
         # If needed, parse old features
         if self.data and self.data["features"]:
             try:
-                self.features = Features.from_storage_file(self.interface, self.data["features"])
+                self.features = Features.from_storage_file(self.references, self.data["features"])
                 Logger.log("Loading stored features!")
 
             except MessageHandlingError as e:
-                ui.queue_quit_message(self.interface, f"Invalid storage file! {e.message}", "Fatal Error")
+                ui.queue_quit_message(self.references, f"Invalid storage file! {e.message}", "Fatal Error")
                 return
 
             self.ready = True
 
         # Settings: Start minimized
         if self.data["settings"]["start_minimized"]:
-            self.interface["RootThread"].queue.append({"cmd": "hide", "params": [], "kwargs": {}, "wait_for_render": True})
+            self.references["RootThread"].queue.append({"cmd": "hide", "params": [], "kwargs": {}, "wait_for_render": True})
 
         # Settings: Auto start
         if self.data["settings"]["auto_attach"]:
-            self.interface["RootThread"].queue.append(
-                {"cmd": lambda: self.interface["ProcessingThread"].queue.append(
+            self.references["RootThread"].queue.append(
+                {"cmd": lambda: self.references["ProcessingThread"].queue.append(
                     {"cmd": "start_button_handle", "params": [None], "kwargs": {}}
                 ), "params": [], "kwargs": {}, "wait_for_render": True, "attr": False})
 

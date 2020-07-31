@@ -1,126 +1,115 @@
 """ All things that can block or lag the UI etc. """
 import builtins
 import os
+import string
 import threading
 import time
+import asyncio
 
 import pymem
 from pymem.ptypes import RemotePointer
 
-from src import ui, exceptions
+from src import ui, thread
 from src.logger import Logger
 from src.network import network
+from src.network.discord import Discord
 from src.processing import storage, listener
 
 
-class ProcessingThread(threading.Thread):
+class ProcessingThread(thread.Thread):
     """ The Processing Thread is for the processing and storage etc.
     """
 
-    def __init__(self, interface: dict):
+    def __init__(self, references: dict):
         """ Initialize
-        :param interface: interface
+        :param references: references
         """
-        super().__init__(name=self.__class__.__name__)
-        self.interface = interface
+        super().__init__(references, self.__class__.__name__, 0.1)
+        self.references = references
 
         # Components
         self.storage = None
         self.gateway = None
         self.network = None
         self.listener = None
+        self.discord = None
 
         # Queue
         self.running = False
         self.queue = []
 
-        # Add thread to interface
-        self.interface.update({"ProcessingThread": self})
+        # Add thread to references
+        self.references.update({"ProcessingThread": self})
 
-    def run(self) -> None:
-        """ Run method
+    def at_start(self):
+        """ Gets called before the loop
         """
-        try:
-            Logger.log("ProcessingThread", add=True)
+        Logger.log("ProcessingThread", add=True)
 
-            # Create basic ui to be able to display events
-            self.interface["RootThread"].queue.append(
-                {"cmd": "create_widgets", "params": [], "kwargs": {}})
+        # Create basic ui to be able to display events
+        self.references["RootThread"].queue.append(
+            {"cmd": "create_widgets", "params": [], "kwargs": {}})
 
-            # Initialize storage
-            self.storage = storage.Storage(self.interface)
+        # Initialize storage
+        self.storage = storage.Storage(self.references)
 
-            # Initialize network
-            self.network = network.Network(self.interface)
+        # Initialize network
+        self.network = network.Network(self.references)
 
-            # Initialize gateway
-            self.gateway = Gateway(self.interface)
+        # Initialize gateway
+        self.gateway = Gateway(self.references)
 
-            # Not initialize listener, because its a thread
+        # Not initialize listener, because its a thread
 
-            # Authentication
-            if self.network.is_valid_key():
-                # Finish UI content
-                self.interface["RootThread"].queue.append(
-                    {"cmd": "create_content", "params": [], "kwargs": {}})
+        # Initialize discord (rich presence) and event loop
+        asyncio.set_event_loop(asyncio.new_event_loop())
+        self.discord = Discord(self.references)
 
-            else:
-                # Ask user
-                self.interface["RootThread"].queue.append(
-                    {"cmd": "create_setup", "params": [self.authentication_callback.__name__], "kwargs": {}})
+        # Authentication
+        if self.network.is_valid_key():
+            # Finish UI content
+            self.references["RootThread"].queue.append(
+                {"cmd": "create_content", "params": [], "kwargs": {}})
 
-            # Loop
-            self.running = True
-            i = 0
+        else:
+            # Ask user
+            self.references["RootThread"].queue.append(
+                {"cmd": "create_setup", "params": [self.authentication_callback.__name__], "kwargs": {}})
 
-            while self.running:
-                if self.queue:
-                    task = self.queue.pop(0)
+    def at_end(self):
+        """ Gets called after the loop
+        """
+        Logger.log("ProcessingThread", add=False)
 
-                    # Execute task command
-                    # Command ist attribute of ProcessingThread or a method?
-                    if "attr" not in task or task["attr"]:
-                        return_value = getattr(self, task["cmd"])(*task["params"], **task["kwargs"])
+    @thread.Thread.schedule(seconds=2)
+    def update_storage_file(self):
+        """ Update storage file
+        """
+        if self.storage.edited:
+            self.storage.update_file()
 
-                    elif not task["attr"]:
-                        return_value = task["cmd"](*task["params"], **task["kwargs"])
+            with self.storage.edited_lock:
+                self.storage.edited = False
 
-                    else:
-                        return_value = None
+    @thread.Thread.schedule(seconds=2)
+    def update_listener_keys(self):
+        """ Update listener keys
+        """
+        if self.storage.listener_keys_edited:
+            if self.listener:
+                self.listener.register_keys()
 
-                    # Check if there is a callback
-                    if "callback" in task:
-                        task["callback"](return_value)
+            with self.storage.listener_keys_edited_lock:
+                self.storage.listener_keys_edited = False
 
-                # Tasks for every 20 secs
-                if i == 20:
-                    i = 0
-
-                    # Save update file if needed
-                    if self.storage.edited:
-                        self.storage.update_file()
-
-                        with self.storage.edited_lock:
-                            self.storage.edited = False
-
-                    # Register listener keys new
-                    if self.storage.listener_keys_edited:
-                        if self.listener:
-                            self.listener.register_keys()
-
-                        with self.storage.listener_keys_edited_lock:
-                            self.storage.listener_keys_edited = False
-
-                else:
-                    i += 1
-
-                time.sleep(0.1)
-
-            Logger.log("ProcessingThread", add=False)
-
-        # If something happens, log it
-        except Exception as e:
-            exceptions.handle(self.interface)
+    @thread.Thread.schedule(seconds=15)
+    def update_rich_presence(self):
+        """ Update rich presence
+        """
+        if self.storage.features:
+            if self.storage.features["3"]["enabled"] and self.storage.features["3"]["available"]:
+                self.discord.update(bool(self.gateway.process_handle), self.gateway.get_server(),
+                                    self.gateway.current_mc_version)
 
     def authentication_callback(self, license_key: str):
         """ Create the widget
@@ -128,15 +117,15 @@ class ProcessingThread(threading.Thread):
         """
         if (resp := self.network.authenticate(license_key))[0]:
             # Finish UI content
-            self.interface["RootThread"].queue.append(
+            self.references["RootThread"].queue.append(
                 {"cmd": "create_content", "params": [], "kwargs": {}})
             Logger.log("Successfully logged in!")
-            ui.queue_alert_message(self.interface, "Successfully logged in!")
+            ui.queue_alert_message(self.references, "Successfully logged in!")
 
         # Invalid key
         else:
             Logger.log(resp[1])
-            ui.queue_alert_message(self.interface, resp[1], warning=True)
+            ui.queue_alert_message(self.references, resp[1], warning=True)
 
     def start_button_handle(self, e):
         """ Starts or stops gateway and checks version
@@ -144,7 +133,7 @@ class ProcessingThread(threading.Thread):
             Note: gets executed inside the processing thread
         :param e: tkinter event
         """
-        root = self.interface["Root"]
+        root = self.references["Root"]
         button = root.start_button
 
         # Cooldown
@@ -166,13 +155,13 @@ class ProcessingThread(threading.Thread):
                     self.gateway.get_addresses()
 
                     # Set up and start listener
-                    self.listener = listener.Listener(self.interface)
+                    self.listener = listener.Listener(self.references)
                     self.listener.register_keys()
                     self.listener.start()
 
                     # Change start and tray button
-                    self.interface["SystemTray"].states["Enabled"] = True
-                    self.interface["SystemTray"].tray.update_menu()
+                    self.references["SystemTray"].states["Enabled"] = True
+                    self.references["SystemTray"].tray.update_menu()
                     root.start_button_var.set("■ Stop")
 
                     # Cooldown, need to copy
@@ -192,7 +181,7 @@ class ProcessingThread(threading.Thread):
                     if self.network.fetch_features(self.gateway.current_mc_version):
 
                         # Create if it isn't already created
-                        self.interface["RootThread"].queue.append(
+                        self.references["RootThread"].queue.append(
                             {"cmd": "create_tab_features", "params": [self.storage.features], "kwargs": {},
                              "callback": lambda t: callback()})
 
@@ -222,13 +211,13 @@ class ProcessingThread(threading.Thread):
                 self.listener.stop()
 
                 # Change start button + tray's enabled button
-                self.interface["SystemTray"].states["Enabled"] = False
-                self.interface["SystemTray"].tray.update_menu()
+                self.references["SystemTray"].states["Enabled"] = False
+                self.references["SystemTray"].tray.update_menu()
                 root.start_button_var.set("Start")
 
-        except (pymem.exception.ProcessNotFound, pymem.exception.WinAPIError):
-            Logger.log("Minecraft not found!")
-            ui.queue_alert_message(self.interface, "Minecraft not found!", warning=True)
+        except (pymem.exception.ProcessNotFound, pymem.exception.WinAPIError) as e:
+            Logger.log(f"Minecraft not found! {e}")
+            ui.queue_alert_message(self.references, "Minecraft not found!", warning=True)
 
         # Cooldown
         root.after(self.storage.get("settings")["attach_cooldown"], (lambda: button.configure(state="active")))
@@ -239,24 +228,28 @@ class Gateway(pymem.Pymem):
     """ The 'Gateway' to mc, it handles the memory editing
     """
 
-    def __init__(self, interface: dict):
+    def __init__(self, references: dict):
         """ Handles memory thanks to pymem, especially their discord helps a lot
-        :param interface: the interface
+        :param references: the references
         """
         super().__init__()
-        self.interface = interface
+        self.references = references
 
         # Data components
-        self.storage = interface["Storage"]
+        self.storage = references["Storage"]
         self.status = {
             "Connected": False,
             "Version": None,
         }
 
+        # I just dont want to add strings every 20secs
+        self.valid_domain_letters = set(string.ascii_letters + string.digits + "-.")
+        self.fallback_server_address = None
+
         self.current_mc_version = None
 
         # Finish
-        self.interface.update({"Gateway": self})
+        self.references.update({"Gateway": self})
 
     def get_address(self, feature_id: str):
         """ Get one address
@@ -367,6 +360,55 @@ class Gateway(pymem.Pymem):
             # Write
             return getattr(self, f"write_{presets['v_type']}")(self.storage.features.addresses[feature_id], new)
 
+    def is_domain(self, domain: str) -> bool:
+        """ Tests if given domain is valid
+        :param domain: (str) the domain
+        """
+        if "." not in domain or not set(domain).issubset(self.valid_domain_letters):
+            return False
+
+        return True
+
+    def get_server(self, *, address=None):
+        """ Returns the currently connected server
+        """
+        if "3" in self.storage.features.addresses:
+            try:
+                # Use normal address
+                if address and not self.fallback_server_address:
+                    self.fallback_server_address = address
+
+                if not address:
+                    address = self.storage.features.addresses["3"]
+
+                server = self.read_string(address, 253)
+
+                # Check returned server domain
+                if not server or not self.is_domain(server):
+                    raise Exception
+
+                else:
+                    return server
+
+            # Need to read fallback value
+            except (pymem.exception.MemoryReadError, UnicodeDecodeError, Exception):
+                if address != self.storage.features.addresses["3"]:
+                    return None
+
+                if not self.fallback_server_address:
+                    a = self.read_uint(self.storage.features.addresses["3"])
+                    b = self.read_uint(self.storage.features.addresses["3"] + 4)
+
+                    self.fallback_server_address = int(str(hex(b))[2:] + str(hex(a))[2:], 16)
+
+                try:
+                    return self.read_string(self.fallback_server_address, 253)
+
+                except (pymem.exception.MemoryReadError, UnicodeDecodeError, Exception):
+                    return None
+
+        return None
+
     def status_check(self):
         """ Checks all sort of things for the status
         """
@@ -396,7 +438,7 @@ class Gateway(pymem.Pymem):
                     self.status[feature["name"]] = False
 
         # Update ui
-        self.interface["RootThread"].queue.append(
+        self.references["RootThread"].queue.append(
             {"cmd": "render_status", "params": [self.status], "kwargs": {}})
 
     def get_mc_version(self) -> str:

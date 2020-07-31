@@ -10,18 +10,18 @@ class Logger:
         It uses no instances because to be available everywhere + laziness
     """
 
-    interface = None
+    references = None
     root = None
 
     queue = []
     queue_lock = threading.Lock()
 
     @classmethod
-    def init(cls, interface):
+    def init(cls, references):
         """ "Initialize" class
-        :param interface: the interface
+        :param references: the references
         """
-        cls.interface = interface
+        cls.references = references
 
     @classmethod
     def log(cls, msg: str, *, add=None):
@@ -52,7 +52,7 @@ class Logger:
         """
         # Load queue if not done
         if not cls.root:
-            cls.root = cls.interface["Root"]
+            cls.root = cls.references["Root"]
 
         if cls.root.log_text:
             # Load messages and clear queue

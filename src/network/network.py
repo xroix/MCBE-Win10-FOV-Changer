@@ -37,13 +37,13 @@ class Network:
     """ Handles authentication, fetching and api based stuff
     """
 
-    def __init__(self, interface: dict):
+    def __init__(self, references: dict):
         """ Initialize
-        :param interface: the interface
+        :param references: the references
         """
-        self.interface = interface
+        self.references = references
 
-        self.storage = interface["Storage"]
+        self.storage = references["Storage"]
 
         # Cryptolens
         self.product_id = 6973
@@ -62,8 +62,8 @@ class Network:
         self.license_key = ""
         self.license_obj = None
 
-        # Add to interface
-        self.interface.update({"Network": self})
+        # Add to references
+        self.references.update({"Network": self})
 
     def authenticate(self, license_key: str) -> tuple:
         """ Authenticate the given license key
@@ -232,14 +232,14 @@ class Network:
             # Alert message
             except MessageHandlingError as e:
                 Logger.log(e.message)
-                ui.queue_alert_message(self.interface, e.message, warning=True)
+                ui.queue_alert_message(self.references, e.message, warning=True)
                 return False
 
             tries += 1
 
         if not data:
             Logger.log("Couldn't communicate with the server!")
-            ui.queue_alert_message(self.interface, "Couldn't communicate with the server!", warning=True)
+            ui.queue_alert_message(self.references, "Couldn't communicate with the server!", warning=True)
             return False
 
         else:
@@ -248,16 +248,16 @@ class Network:
                 offs = json.loads(zlib.decompress(base64.b64decode(data["offsets"].encode("utf8"))).decode("utf8"))
 
                 # Parse server response
-                self.storage.features = storage.Features.from_server_response(self.interface, offs, saved_features=self.storage.features if self.storage.features else None)
+                self.storage.features = storage.Features.from_server_response(self.references, offs, saved_features=self.storage.features if self.storage.features else None)
 
             except (json.JSONDecodeError, binascii.Error):
                 Logger.log("Invalid response from server!")
-                ui.queue_alert_message(self.interface, "Invalid response from server!", warning=True)
+                ui.queue_alert_message(self.references, "Invalid response from server!", warning=True)
                 return False
 
             except MessageHandlingError as e:
                 Logger.log(e.message)
-                ui.queue_alert_message(self.interface, "Invalid offsets!", warning=True)
+                ui.queue_alert_message(self.references, "Invalid offsets!", warning=True)
                 return False
 
             self.storage.set("features", self.storage.features.for_json)

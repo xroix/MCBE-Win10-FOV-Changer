@@ -1,5 +1,7 @@
 """ The entrypoint - core methods and classes"""
 import sys
+import threading
+import time
 
 import pystray as ps
 from PIL import Image
@@ -7,7 +9,7 @@ from PIL import Image
 from src import logger
 from src import ui, exceptions
 from src.logger import Logger
-from src.processing import processing, storage
+from src.processing import storage
 
 
 class SystemTray:
@@ -19,15 +21,15 @@ class SystemTray:
         """
         super().__init__()
 
-        # Interface, saves references of important objects
+        # References, saves references of important objects
         # ** Add new references in its init (at the end to avoid not created attributes) ! **
-        self.interface = {"SystemTray": self}
+        self.references = {"SystemTray": self}
 
         # UI
-        self.root_thread = ui.RootThread(self.interface)
+        self.root_thread = ui.RootThread(self.references)
 
         # Processing
-        self.processing_thread = processing.ProcessingThread(self.interface)
+        self.processing_thread = processing.ProcessingThread(self.references)
 
         # Tray
         self.tray = None
@@ -44,15 +46,15 @@ class SystemTray:
         }
 
         # Set up logger
-        logger.Logger.init(self.interface)
+        logger.Logger.init(self.references)
 
     def start_button(self):
         """ Like the root start_button
         """
-        if "ProcessingThread" in self.interface and "Root" in self.interface:
-            if self.interface["Root"].rendered:
+        if "ProcessingThread" in self.references and "Root" in self.references:
+            if self.references["Root"].rendered:
 
-                self.interface["ProcessingThread"].queue.append(
+                self.references["ProcessingThread"].queue.append(
                     {"cmd": "start_button_handle", "params": [None], "kwargs": {}}
                 )
 
@@ -129,4 +131,5 @@ class SystemTray:
             sys.exit(0)
 
         # Save storage
-        self.interface["Storage"].update_file()
+        self.references["Storage"].update_file()
+

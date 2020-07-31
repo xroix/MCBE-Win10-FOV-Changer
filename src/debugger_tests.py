@@ -21,10 +21,10 @@ def read_p(manager: pymem.Pymem, pointer):
 
 
 pm = pymem.Pymem()
-# pm.open_process_from_name("Minecraft.Windows.exe")
+pm.open_process_from_name("Minecraft.Windows.exe")
 
 rpc = pypresence.Presence(client_id=client_id)
-# rpc.connect()
+rpc.connect()
 
 
 def update_presence(state):

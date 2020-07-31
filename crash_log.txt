@@ -1,28 +1,32 @@
-----------------------------------------[14.07.2020 - 16:16:15]----------------------------------------
-[16:16:12] + Root Thread
-[16:16:12] + ProcessingThread
-[16:16:12] + System Tray
-[16:16:12] > Loading stored features!
-[16:16:12] + Storage
-[16:16:12] + Root Gui
-[16:16:13] > Rendered Features!
-[16:16:14] > Attached to Minecraft!
-[16:16:14] > Found MC Version '1.16.2.0'
-[16:16:14] > Saved version doesn't match!
-[16:16:14] > New feature offsets are needed!
-[16:16:14] > Getting features for '11620'
+----------------------------------------[16.07.2020 - 23:37:16]----------------------------------------
+[23:37:14] + Root Thread
+[23:37:14] + ProcessingThread
+[23:37:14] + System Tray
+[23:37:14] > Loading stored features!
+[23:37:14] + Storage
+[23:37:14] + Root Gui
+[23:37:15] > Rendered Features!
 
-[16:16:15] > Fetched api key
-[16:16:15] > Feature request number 0
+[23:37:16] > Attached to Minecraft!
+[23:37:16] > Found MC Version '1.16.102.0'
+[23:37:16] > Saved version ist correct!
+[23:37:16] + Found address for FOV!
+[23:37:16] + Found address for Hide Hand!
+[23:37:16] + Found address for Sensitivity!
+[23:37:16] + Found address for Rich Presence!
 Traceback (most recent call last):
-  File "C:\Users\xroix\Desktop\Coding\Programming\Python\Other\FOV-Changer\src\processing\processing.py", line 83, in run
+  File "C:\Users\xroix\Desktop\Coding\Programming\Python\Other\FOV-Changer\src\processing\processing.py", line 91, in run
     return_value = getattr(self, task["cmd"])(*task["params"], **task["kwargs"])
-  File "C:\Users\xroix\Desktop\Coding\Programming\Python\Other\FOV-Changer\src\processing\processing.py", line 192, in start_button_handle
-    if self.network.fetch_features(self.gateway.current_mc_version):
-  File "C:\Users\xroix\Desktop\Coding\Programming\Python\Other\FOV-Changer\src\network\network.py", line 236, in fetch_features
-    offs = json.loads(zlib.decompress(base64.b64decode(data["offsets"].encode("utf8"))).decode("utf8"))
-  File "C:\Users\xroix\AppData\Local\Programs\Python\Python38\lib\base64.py", line 87, in b64decode
-    return binascii.a2b_base64(s)
-binascii.Error: Incorrect padding
+  File "C:\Users\xroix\Desktop\Coding\Programming\Python\Other\FOV-Changer\src\processing\processing.py", line 231, in start_button_handle
+    callback()
+  File "C:\Users\xroix\Desktop\Coding\Programming\Python\Other\FOV-Changer\src\processing\processing.py", line 184, in callback
+    self.gateway.get_addresses()
+  File "C:\Users\xroix\Desktop\Coding\Programming\Python\Other\FOV-Changer\src\processing\processing.py", line 353, in get_addresses
+    self.status_check()
+  File "C:\Users\xroix\Desktop\Coding\Programming\Python\Other\FOV-Changer\src\processing\processing.py", line 449, in status_check
+    self.read_address(addr_id)
+  File "C:\Users\xroix\Desktop\Coding\Programming\Python\Other\FOV-Changer\src\processing\processing.py", line 365, in read_address
+    value = getattr(self, f"read_{presets['v_type']}")(self.storage.features.addresses[feature_id])
+KeyError: 'v_type'
 
 
