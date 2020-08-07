@@ -2,6 +2,7 @@
 
 import threading
 import time
+import types
 
 from src import exceptions
 
@@ -22,12 +23,28 @@ class Thread(threading.Thread):
         self.queue = []
         self.tasks = {}
 
-        self.running = True
+        self.running = False
 
         self.i = 0
         self.i_end = 0
 
         self.wait_time = wait_time
+
+        # Load all scheduled tasks / methods / functions
+        for name in self.scheduled_methods:
+            f = getattr(self, name).__func__
+            seconds = f.seconds
+
+            # Add to .tasks
+            if seconds in self.tasks:
+                self.tasks[seconds].add(f)
+
+            else:
+                self.tasks.update({seconds: {f}})
+
+            # Highest interval?
+            if seconds > self.i_end * self.wait_time:
+                self.i_end = seconds / self.wait_time
 
     def at_start(self):
         """ Gets called before the loop
@@ -46,14 +63,15 @@ class Thread(threading.Thread):
             self.at_start()
 
             # Loop
+            self.running = True
             while self.running:
 
                 # Execute scheduled methods
-                seconds = self.i / self.wait_time
+                seconds = self.i * self.wait_time
 
                 if seconds in self.tasks:
                     for method in self.tasks[seconds]:
-                        method()
+                        method(self)
 
                 # Execute queued methods
                 if self.queue:
@@ -75,7 +93,7 @@ class Thread(threading.Thread):
                         task["callback"](return_value)
 
                 # Highest value?
-                if self.i > self.i_end:
+                if self.i >= self.i_end:
                     self.i = 0
 
                 else:
@@ -97,19 +115,34 @@ class Thread(threading.Thread):
 
         def inner(f):
             """"""
-            self = f.__self__
 
-            # Add to tasks
-            if seconds in self.tasks:
-                self.tasks[seconds].add(f)
+            def __set_name__(self, owner, name):
+                """ Will get executed when the function gets assigned to class
+                :param self: the owner obj
+                :param owner: the owner obj
+                :param name: the name of the new function
+                """
+                # Note function5
+                if not hasattr(owner, "scheduled_methods"):
+                    owner.scheduled_methods = {name}
 
-            else:
-                self.tasks.update({seconds: {f}})
+                else:
+                    owner.scheduled_methods.add(name)
 
-            # Highest interval?
-            if seconds > self.i_end:
-                self.i_end = seconds
+                # Restore old function
+                setattr(owner, name, self.f)
 
-            return f
+            f = staticmethod(f)
+
+            # Save it
+            f.__func__.seconds = seconds
+
+            # Create the temporary object
+            temp_f = type(f"temp_{f.__func__.__name__}", (object,), {
+                "__set_name__": __set_name__,
+                "f": f
+            })()
+
+            return temp_f
 
         return inner

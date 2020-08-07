@@ -34,10 +34,6 @@ class ProcessingThread(thread.Thread):
         self.listener = None
         self.discord = None
 
-        # Queue
-        self.running = False
-        self.queue = []
-
         # Add thread to references
         self.references.update({"ProcessingThread": self})
 
@@ -62,19 +58,13 @@ class ProcessingThread(thread.Thread):
         # Not initialize listener, because its a thread
 
         # Initialize discord (rich presence) and event loop
-        asyncio.set_event_loop(asyncio.new_event_loop())
-        self.discord = Discord(self.references)
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        self.discord = Discord(self.references, loop=loop)
 
-        # Authentication
-        if self.network.is_valid_key():
-            # Finish UI content
-            self.references["RootThread"].queue.append(
-                {"cmd": "create_content", "params": [], "kwargs": {}})
-
-        else:
-            # Ask user
-            self.references["RootThread"].queue.append(
-                {"cmd": "create_setup", "params": [self.authentication_callback.__name__], "kwargs": {}})
+        # Finish UI content
+        self.references["RootThread"].queue.append(
+            {"cmd": "create_content", "params": [], "kwargs": {}})
 
     def at_end(self):
         """ Gets called after the loop
@@ -110,22 +100,6 @@ class ProcessingThread(thread.Thread):
             if self.storage.features["3"]["enabled"] and self.storage.features["3"]["available"]:
                 self.discord.update(bool(self.gateway.process_handle), self.gateway.get_server(),
                                     self.gateway.current_mc_version)
-
-    def authentication_callback(self, license_key: str):
-        """ Create the widget
-        :param license_key: (str) the key
-        """
-        if (resp := self.network.authenticate(license_key))[0]:
-            # Finish UI content
-            self.references["RootThread"].queue.append(
-                {"cmd": "create_content", "params": [], "kwargs": {}})
-            Logger.log("Successfully logged in!")
-            ui.queue_alert_message(self.references, "Successfully logged in!")
-
-        # Invalid key
-        else:
-            Logger.log(resp[1])
-            ui.queue_alert_message(self.references, resp[1], warning=True)
 
     def start_button_handle(self, e):
         """ Starts or stops gateway and checks version
@@ -294,11 +268,13 @@ class Gateway(pymem.Pymem):
                     # Use the pointer
                     self.get_address(_feature_id)
 
-                    # Get addresses for NoneTypes in feature value value
-                    for i, _value in enumerate(_feature_value["value"]):
-                        if not _value or _value == " ":
-                            _feature_value["value"][i] = (new_value := str(self.read_address(_feature_id)))
-                            self.storage.features.tk_vars[_feature_id]["value"][i].set(new_value)
+                    # Get addresses for NoneTypes in feature settings values
+                    # Only for listener compatible features
+                    if self.storage.features.presets[_feature_id]["g"].listener:
+                        for _key, _value in _feature_value["settings"].items():
+                            if not _value or _value == " ":
+                                _feature_value["settings"][_key] = (new_value := str(self.read_address(_feature_id)))
+                                self.storage.features.tk_vars[_feature_id]["settings"][_key].set(new_value)
 
                     # Keep track
                     _done.add(_feature_id)
@@ -333,11 +309,11 @@ class Gateway(pymem.Pymem):
             presets = self.storage.features.presets[feature_id]
 
             # Read and cast
-            value = getattr(self, f"read_{presets['v_type']}")(self.storage.features.addresses[feature_id])
+            value = getattr(self, f"read_{presets['a_type']}")(self.storage.features.addresses[feature_id])
 
             # If it needs to be decoded
-            if "v_decode" in presets:
-                value = self.storage.features.presets[feature_id]["v_decode"](value)
+            if "s_decode" in presets:
+                value = self.storage.features.presets[feature_id]["s_decode"](value)
 
             return value
 
@@ -351,14 +327,14 @@ class Gateway(pymem.Pymem):
             presets = self.storage.features.presets[feature_id]
 
             # Cast into right type
-            new = getattr(builtins, presets["v_type"])(new)
+            new = presets["s_type"](new)
 
             # If it needs to be encoded
-            if "v_encode" in presets:
-                new = self.storage.features.presets[feature_id]["v_encode"](new)
+            if "s_encode" in presets:
+                new = self.storage.features.presets[feature_id]["s_encode"](new)
 
             # Write
-            return getattr(self, f"write_{presets['v_type']}")(self.storage.features.addresses[feature_id], new)
+            return getattr(self, f"write_{presets['a_type']}")(self.storage.features.addresses[feature_id], new)
 
     def is_domain(self, domain: str) -> bool:
         """ Tests if given domain is valid
@@ -369,8 +345,30 @@ class Gateway(pymem.Pymem):
 
         return True
 
+    def server_address_check(self):
+        """ Checks if the addresses for the discord rich presence are available
+        """
+        if "3" in self.storage.features.addresses:
+            try:
+                if self.fallback_server_address:
+                    self.read_string(self.fallback_server_address, 253)
+
+                else:
+                    self.read_string(self.storage.features.addresses["3"], 253)
+
+            # Something happened
+            except (pymem.exception.MemoryReadError, UnicodeDecodeError, Exception):
+                return False
+
+            return True
+
+        # No address loaded
+        else:
+            return None
+
     def get_server(self, *, address=None):
         """ Returns the currently connected server
+        :returns: the server or None
         """
         if "3" in self.storage.features.addresses:
             try:
@@ -424,14 +422,22 @@ class Gateway(pymem.Pymem):
                 feature = self.storage.features[addr_id]
 
                 try:
+                    # Not enabled or not available
                     if not feature["enabled"] or not feature["available"]:
-                        self.status[feature["name"]] = None
+                        status = None
 
+                    # Custom check
+                    elif "a_status_check" in self.storage.features.presets[addr_id]:
+                        status = self.storage.features.presets[addr_id]["a_status_check"](self)
+
+                    # Else just try to read
                     else:
                         if self.process_handle:
                             self.read_address(addr_id)
 
-                        self.status[feature["name"]] = True
+                        status = True
+
+                    self.status[feature["name"]] = status
 
                 except pymem.exception.MemoryReadError:
                     Logger.log(f"{feature['name']} is unavailable!", add=False)

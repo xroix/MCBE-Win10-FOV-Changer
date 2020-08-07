@@ -50,7 +50,8 @@ class Listener(keyboard.Listener):
         for feature_id, feature_value in self.features.data.items():
 
             # Duplicates
-            if feature_id not in done and feature_value["key"]:
+            # For listener?
+            if feature_id not in done and self.storage.features.presets[feature_id]["g"].listener and feature_value["key"]:
                 feature_id_list = (list(feature_id) if feature_value["available"] else []) + \
                                   [x for x in feature_value["children"] if self.features[x]["available"]]
 
@@ -63,10 +64,10 @@ class Listener(keyboard.Listener):
                 else:
                     self.keys.update({feature_value["key"].lower(): feature_id_list})
 
-    def inner(self, key, index: int, on_press: bool):
+    def inner(self, key, index: str, on_press: bool):
         """ To shorten up code, for register_keys
         :param key: key from pynput
-        :param index: new value index
+        :param index: new setting index
         :param on_press: (bool) if from on press
         """
         # Normalize the key code
@@ -89,7 +90,7 @@ class Listener(keyboard.Listener):
                             continue
 
                         try:
-                            self.gateway.write_address(feature_id, feature_value["value"][index])
+                            self.gateway.write_address(feature_id, feature_value["settings"][index])
 
                         # Minecraft was closed
                         except pymem.exception.MemoryWriteError:
@@ -108,10 +109,10 @@ class Listener(keyboard.Listener):
         """ On press event
         :param key: the key code
         """
-        self.inner(key, 1, True)
+        self.inner(key, "after", True)
 
     def on_release(self, key: keyboard.KeyCode):
         """ On release event
         :param key: the key code
         """
-        self.inner(key, 0, False)
+        self.inner(key, "before", False)

@@ -9,8 +9,10 @@ import pywintypes  # For fixing the 'DLL not found' error
 
 from src import core
 
-VERSION = "1.1.0"
-DEBUG = True
+
+VERSION = "1.1.1"
+DEBUG = False
+
 
 if __name__ == '__main__':
     tray = core.SystemTray()

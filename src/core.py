@@ -9,7 +9,7 @@ from PIL import Image
 from src import logger
 from src import ui, exceptions
 from src.logger import Logger
-from src.processing import storage
+from src.processing import storage, processing
 
 
 class SystemTray:
@@ -93,27 +93,31 @@ class SystemTray:
     def run(self) -> None:
         """ Start everything because the tray controls most of the components
         """
-        self.tray = ps.Icon("FOV Changer", icon=self.icon_image, title="FOV Changer", menu=ps.Menu(
-            ps.MenuItem("FOV Changer", self.void, enabled=False),
-            ps.Menu.SEPARATOR,
-            ps.MenuItem("Open Window", self.action),
-            ps.MenuItem("Enabled", self.action, checked=lambda item: self.states["Enabled"]),
-            ps.Menu.SEPARATOR,
-            ps.MenuItem("Exit", self.action)
-        ))
+        try:
+            self.tray = ps.Icon("FOV Changer", icon=self.icon_image, title="FOV Changer", menu=ps.Menu(
+                ps.MenuItem("FOV Changer", self.void, enabled=False),
+                ps.Menu.SEPARATOR,
+                ps.MenuItem("Open Window", self.action),
+                ps.MenuItem("Enabled", self.action, checked=lambda item: self.states["Enabled"]),
+                ps.Menu.SEPARATOR,
+                ps.MenuItem("Exit", self.action)
+            ))
 
-        # Start GUI
-        self.root_thread.start()
+            # Start GUI
+            self.root_thread.start()
 
-        # Start Processing stuff
-        self.processing_thread.start()
+            # Start Processing stuff
+            self.processing_thread.start()
 
-        # Start tray
-        Logger.log("System Tray", add=True)
-        self.tray.run()
-        Logger.log("System Tray", add=False)
+            # Start tray
+            Logger.log("System Tray", add=True)
+            self.tray.run()
+            Logger.log("System Tray", add=False)
 
-        self.on_shutdown()
+            self.on_shutdown()
+
+        except Exception:
+            exceptions.handle_error(self.references)
 
     def on_shutdown(self):
         """ Will get executed when the tray stops

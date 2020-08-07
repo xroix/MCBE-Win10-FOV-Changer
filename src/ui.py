@@ -50,6 +50,65 @@ def queue_quit_message(references: dict, msg: str, title: str):
          "callback": references["SystemTray"].stop_tray})
 
 
+class ScrollableFrame(tk.Frame):
+    """ A frame with a scrollbar
+    """
+
+    def __init__(self, master, *args, **kwargs):
+        """ Initialize
+        :param master: the parent widget
+        :param args:
+        :param kwargs:
+        """
+        # Keep track
+        self.initiated = False
+
+        # That's the outer frame
+        self.outer_frame = tk.Frame(master, *args, **kwargs)
+
+        # Canvas
+        payload = {}
+        if "height" in kwargs:
+            payload.update({"height": kwargs["height"]})
+
+        if "width" in kwargs:
+            payload.update({"width": kwargs["width"]})
+
+        self.canvas = tk.Canvas(self.outer_frame, **payload)
+        self.canvas.pack(side="left", fill="both", expand=True)
+
+        # This obj is the inner frame, so that it can be passed directly on to an widget
+        super().__init__(self.canvas)
+        self.bind("<Configure>", lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
+        self.canvas.create_window((0, 0), window=self, anchor="nw")
+
+        # Scrollbar
+        self.scrollbar = ttk.Scrollbar(self.outer_frame, orient="vertical", command=self.canvas.yview)
+        self.scrollbar.pack(side="right", fill="y")
+
+        # Configure canvas
+        self.canvas.configure(yscrollcommand=self.scrollbar.set)
+        self.canvas.bind_all("<MouseWheel>", self.on_mousewheel)
+
+        self.initiated = True
+
+    def __getattribute__(self, item):
+        """ Overriding attribute access so that for example .pack() gets called on the .outer_frame
+        :param item: the name of the attribute
+        :returns: the attribute
+        """
+        if object.__getattribute__(self, "initiated") and callable(object.__getattribute__(self, item)):
+            return object.__getattribute__(self, "outer_frame").__getattribute__(item)
+
+        return object.__getattribute__(self, item)
+
+    def on_mousewheel(self, e):
+        """ Event on mousewheel change
+        :param e: event obj
+        """
+        self.canvas.yview_scroll(int(-1*(e.delta/120)), "units")
+
+
 class RootThread(threading.Thread):
     """ The thread for the gui (tkinter)
     """
@@ -89,7 +148,7 @@ class RootThread(threading.Thread):
 
         # If something happens, log it
         except Exception as e:
-            exceptions.handle(self.references)
+            exceptions.handle_error(self.references)
 
 
 class Root(tk.Tk):
@@ -109,7 +168,7 @@ class Root(tk.Tk):
         self.title("FOV Changer")
         self.protocol("WM_DELETE_WINDOW", self.hide)
         self.resizable(False, False)
-        self.geometry("800x410")
+        self.geometry("800x440")
         self.tk.call('wm', 'iconphoto', self._w,
                      ImageTk.PhotoImage(Image.open(storage.find_file("logo.ico", meipass=True))))
 
@@ -122,7 +181,6 @@ class Root(tk.Tk):
 
         # Widgets whose reference are needed
         self.main_frame = None
-        self.setup_frame = None
         self.status_frame = None
         self.feature_frame = None
         self.feature_frame_placeholder = None
@@ -149,7 +207,7 @@ class Root(tk.Tk):
         # TopLevels
         self.feature_edit_manager = FeatureEditManager(self.references, self)
 
-        # Cache
+        # Cache some things
         self.cache = {
             "validate": "",  # On entry key validate
             "space": None  # Space between features
@@ -169,7 +227,7 @@ class Root(tk.Tk):
         self.references["Storage"].update_file()
 
     def queue_update(self):
-        """ Run every 200 ms a new task from the queue
+        """ Run every 500 ms a new task from the queue
             E.g. {"cmd": "alert", "params":["msg", "hey"], "kwargs":{}, wait=True, callback=print}}
         """
         try:
@@ -182,10 +240,12 @@ class Root(tk.Tk):
                 t = 0
 
             else:
-                if "attr" not in task or task["attr"]:
+                # Attribute of thread
+                if isinstance("cmd", str):
                     t = getattr(self, task["cmd"])(*task["params"], **task["kwargs"])
 
-                elif not task["attr"]:
+                # Callable method
+                elif callable(task["cmd"]):
                     t = task["cmd"](*task["params"], **task["kwargs"])
 
                 else:
@@ -225,7 +285,7 @@ class Root(tk.Tk):
                                                                                      'children': [('Notebook.label',
                                                                                                    {'side': 'top',
                                                                                                     'sticky': ''})]})]})])
-        self.style.configure("Tab", padding=[50, 4], font=(self.font, 12))
+        self.style.configure("Tab", padding=[51, 4], font=(self.font, 12))
         self.style.configure("TCheckbutton", font=(self.font, 13))
         self.style.configure("TEntry", padding=[10, 2, 10, 2])
         self.style.configure("TButton", font=(self.font, 12), padding=[30, 2, 30, 2])
@@ -255,40 +315,12 @@ class Root(tk.Tk):
         self.notification_label = tk.Label(self.notification_frame, bg="#E0E0E0", fg="#E0E0E0",
                                            textvariable=self.notification_message, font=(self.font, 14))
 
-    def create_setup(self, callback: str):
-        """ Create the setup for asking the user for the license (AUTHENTICATION)
-        :param callback: (str) method name which gets added to the processing queue
-        """
-        self.setup_frame = tk.Frame(self.main_frame, bg="#E0E0E0")
-        self.setup_frame.grid(column=1, row=1, sticky="WENS")
-
-        tk.Label(self.setup_frame, text="Please enter your license key to prove your beta access.", bg="#E0E0E0",
-                 font=(self.font, 12)) \
-            .place(relx=.5, y=120, anchor="center")
-
-        key_entry = ttk.Entry(self.setup_frame, font=(self.font, 12), justify="center",
-                              textvariable=self.setup_key_entry_var, width=30)
-        key_entry.place(relx=.4, y=200, anchor="center")
-
-        key_button = ttk.Button(self.setup_frame, text="Authenticate", takefocus=False)
-        key_button.bind("<Button-1>", lambda e: self.references["ProcessingThread"].queue.append(
-            {"cmd": callback, "params": [self.setup_key_entry_var.get().strip()], "kwargs": {}}
-        ))
-        key_button.place(relx=.7, y=200, anchor="center")
-
-        # Return to default cursor
-        self.config(cursor="arrow")
-
     def create_content(self):
         """ Sub create from createWidgets, initializes the content
             Will also create notebook
         """
         # Add storage
         self.storage = self.references["Storage"]
-
-        # Destroy old frame
-        if self.setup_frame:
-            self.setup_frame.destroy()
 
         # Control dashboard
         control_frame = tk.Frame(self.main_frame, bg="#E0E0E0")
@@ -386,7 +418,8 @@ class Root(tk.Tk):
             self.feature_frame_placeholder.place(relx=.5, y=100, anchor="center")
 
         # Notebook Settings
-        self.storage.settings_tk_vars = self.create_tab_settings()
+        self.storage.settings.tk_vars = self.create_tab_settings()
+        Logger.log("Rendered Settings!")
 
         # Notebook Log
         self.create_tab_log()
@@ -411,19 +444,20 @@ class Root(tk.Tk):
         # Vars for return
         payload = {}
 
-        def render(feature: dict, feature_id: str, i: int, *, child=False):
+        def render(feature: dict, feature_id: str, i: int, *, child=False) -> dict:
             """ Render function for better organisation
             :param feature: (dict) feature
             :param feature_id: the if of the feature
             :param i: (int) index
             :param child: if it is a child
+            :returns: the tk vars
             """
             # Padding
             pad_y = space if i % 2 == 0 else 0
             extra_column = int(child)
 
             # Payload which gets merged into the main payload
-            _payload = {"enabled": tk.IntVar(), "key": tk.StringVar(), "value": []}
+            _payload = {"enabled": tk.IntVar(), "key": tk.StringVar(), "settings": {}}
 
             # Enable Button + Label
             enable_button = ttk.Checkbutton(self.feature_frame, text=f"   {feature['name']}",
@@ -434,7 +468,7 @@ class Root(tk.Tk):
             _payload["enabled"].set(feature["enabled"] if feature["enabled"] is not None else False)
 
             # Entry for the key bind
-            if not child:
+            if not child and features.presets[feature_id]["g"].listener:
                 entry = ttk.Entry(self.feature_frame, font=(self.font, 12), justify="center",
                                   textvariable=_payload["key"])
                 entry.grid(column=1, row=i, sticky="ew", padx=10, pady=pad_y)
@@ -503,8 +537,11 @@ class Root(tk.Tk):
     def create_tab_settings(self):
         """ Displays the settings
         """
-        settings = self.storage.get("settings")
+        settings = self.storage.settings.data
         settings_url = self.storage.get("settings_help_url")
+
+        settings_inner = ScrollableFrame(self.settings_frame, height=230)
+        settings_inner.pack(expand=True, fill="x")
 
         # Calculate y padding
         length = len(settings) + 1
@@ -522,8 +559,7 @@ class Root(tk.Tk):
             tk_var = None
 
             # Text
-            tk.Label(self.settings_frame, text=" ".join(x[0].upper() + x[1:] for x in setting_name.split("_")),
-                     font=(self.font, 13)) \
+            tk.Label(settings_inner, text=self.storage.settings.presets[setting_name]["n"], font=(self.font, 13)) \
                 .grid(column=0, row=i, padx=30, pady=pad_y, sticky="e")
 
             # User input
@@ -531,26 +567,37 @@ class Root(tk.Tk):
             if isinstance(setting_value, bool):
                 tk_var = tk.IntVar()
 
-                setting_input = ttk.Checkbutton(self.settings_frame, takefocus=False, variable=tk_var)
+                setting_input = ttk.Checkbutton(settings_inner, takefocus=False, variable=tk_var)
                 setting_input.grid(column=1, row=i, padx=10, pady=pad_y, sticky="w")
+
+            # Function -> button
+            elif callable(setting_value):
+                tk_var = None
+
+                setting_action = ttk.Button(settings_inner, text="Press me", takefocus=False,
+                                            command=setting_value)
+                setting_action.grid(column=1, row=i, padx=10, pady=pad_y, sticky="ew")
 
             # Else
             else:
                 tk_var = tk.StringVar()
 
-                setting_input = ttk.Entry(self.settings_frame, font=(self.font, 12), justify="left",
+                setting_input = ttk.Entry(settings_inner, font=(self.font, 12), justify="left",
                                           textvariable=tk_var,
                                           takefocus=False)
-                setting_input.grid(column=1, row=i, padx=10, pady=pad_y, sticky="w")
-
-            tk_var.set(setting_value)
+                setting_input.grid(column=1, row=i, padx=10, pady=pad_y, sticky="w", ipadx=40)
 
             # Help url
-            url = tk.Label(self.settings_frame, text="?", font=(self.font, 13), fg="#3A606E", cursor="hand2")
+            url = tk.Label(settings_inner, text="?", font=(self.font, 13), fg="#3A606E", cursor="hand2")
             url.grid(column=3, row=i, sticky="e", padx=50, pady=space if i % 2 == 0 else 0)
             url.bind("<Button-1>", lambda e: webbrowser.open(settings_url.format(setting_name), new=2))
 
-            return tk_var
+            # Has a user input?
+            if tk_var:
+                tk_var.set(setting_value)
+                return tk_var
+
+            return None
 
         tk_vars = {}
 
@@ -559,10 +606,12 @@ class Root(tk.Tk):
             tk_vars.update({name: render(name, value, i)})
             i += 1
 
+        # tk.Frame(self.settings_frame, bg="red", height=10).pack(expand=True, fill="x")
+
         # Create save button + help button
         save_button = ttk.Button(self.settings_frame, text="Save", takefocus=False,
                                  command=self.on_settings_save_button)
-        save_button.grid(column=1, row=i, padx=10, pady=space if i % 2 == 0 else 0, sticky="ew")
+        save_button.pack(pady=30)
 
         return tk_vars
 
@@ -591,16 +640,16 @@ class Root(tk.Tk):
         tk.Label(self.info_frame, text="Made by XroixHD", font=(self.font, 13)) \
             .pack(padx=50, pady=30)
 
-        ttk.Button(self.info_frame, text="GitHub", takefocus=False,
-                   command=lambda: webbrowser.open("https://github.com/XroixHD", new=2)) \
+        ttk.Button(self.info_frame, text="Github", takefocus=False,
+                   command=lambda: webbrowser.open("https://www.github.com/XroixHD/MCBE-Win10-FOV-Changer", new=2)) \
             .pack(padx=50, pady=10)
 
-        ttk.Button(self.info_frame, text="YouTube", takefocus=False,
-                   command=lambda: webbrowser.open("https://www.youtube.com/channel/UC4dNeoE7POOYMelEV8w-zQg", new=2)) \
+        ttk.Button(self.info_frame, text="Docs", takefocus=False,
+                   command=lambda: webbrowser.open("https://fov.xroix.me/docs", new=2)) \
             .pack(padx=50, pady=0)
 
         ttk.Button(self.info_frame, text="Discord", takefocus=False,
-                   command=lambda: webbrowser.open("https://discord.com/invite/fF3NKpM", new=2)) \
+                   command=lambda: webbrowser.open("https://www.discord.com/invite/fF3NKpM", new=2)) \
             .pack(padx=50, pady=10)
 
         tk.Label(self.info_frame, text=f"v{VERSION}", font=("Consolas", 13)) \
@@ -644,20 +693,16 @@ class Root(tk.Tk):
 
             # Update status
             if feature_value["name"] in self.references["Gateway"].status:
-                # print(bool(state if state else None))
-                # print(state)
-                # print(self.references["Gateway"].status)
-                # self.references["Gateway"].status[feature_value["name"]] = state if state else None
                 self.references["ProcessingThread"].queue.append(
-                    {"cmd": self.references["Gateway"].status_check, "params": [], "kwargs": {}, "attr": False})
+                    {"cmd": self.references["Gateway"].status_check, "params": [], "kwargs": {}})
 
     def on_settings_save_button(self):
         """ Save settings
         """
-        if self.storage.settings_tk_vars:
+        if self.storage.settings.tk_vars:
             settings = self.storage.get("settings")
 
-            for name, value in self.storage.settings_tk_vars.items():
+            for name, value in self.storage.settings.tk_vars.items():
                 try:
                     # Try to cast
                     value = type(settings[name])(value.get())
@@ -763,44 +808,8 @@ class FeatureEditManager:
             top.protocol("WM_DELETE_WINDOW", lambda: (self.hide(feature_id)))
             # top.bind("<Return>", lambda e: self.save(feature_id))
 
-            # Content
-            # tk.Label(top, text=feature["name"], font=(self.root.font, 18), fg="#3A606E")\
-            #     .place(relx=.5, y=40, anchor="center")
-
-            before = tk.StringVar()
-            before.set(str(temp if (temp := feature["value"][0]) else ""))
-            payload["value"].append(before)
-
-            after = tk.StringVar()
-            after.set(str(temp if (temp := feature["value"][1]) else ""))
-            payload["value"].append(after)
-
-            # Before
-            before_wrapper = tk.Frame(top, height=29, width=70)
-            before_wrapper.place(relx=.3, rely=.3, anchor="center")
-            before_wrapper.pack_propagate(0)
-            ttk.Entry(before_wrapper, font=(self.root.font, 12), justify="center",
-                      textvariable=before) \
-                .pack(fill="both")
-
-            # Middle
-            tk.Label(top, text="➞", font=(self.root.font, 25), fg="#3A606E") \
-                .place(relx=.5, rely=.3, anchor="center")
-
-            # After
-            after_wrapper = tk.Frame(top, height=29, width=70)
-            after_wrapper.place(relx=.7, rely=.3, anchor="center")
-            after_wrapper.pack_propagate(0)
-            ttk.Entry(after_wrapper, font=(self.root.font, 12), justify="center",
-                      textvariable=after) \
-                .pack(fill="both")
-
-            # Save
-            save_button_wrapper = tk.Frame(top, width=110, height=29)
-            save_button_wrapper.pack_propagate(0)
-            ttk.Button(save_button_wrapper, text="Save", takefocus=False,
-                       command=lambda: self.save(feature_id)).pack(fill="both")
-            save_button_wrapper.place(relx=.5, rely=.7, anchor="center")
+            # Load content  based on feature group
+            self.storage.features.presets[feature_id]["g"].create_edit_button_widgets(manager=self, top=top, feature_id=feature_id, feature=feature, payload=payload)
 
             # Add it
             self.top_levels.update({feature_id: top})
@@ -827,26 +836,26 @@ class FeatureEditManager:
 
             # Get some values to clean up code
             feature = self.storage.features[feature_id]
-            tk_var = self.storage.features.tk_vars[feature_id]["value"]
+            tk_var = self.storage.features.tk_vars[feature_id]["settings"]
             presets = self.storage.features.presets[feature_id]
 
-            values = [x.get() for x in tk_var]
+            settings = {x: y.get() for x, y in tk_var.items()}
 
-            # Save new values into the real value field and check type
-            # Also translate the value if needed
-            if self.storage.features.check_value(self.storage.features, feature_id, feature, override_value=values):
-                feature["value"] = values
+            # Save new values into the real settings field and check type
+            # Also translate the values if needed
+            if self.storage.features.check_settings(self.storage.features, feature_id, feature, override=settings):
+                feature["settings"] = settings
                 self.references["Storage"].update_file()
 
-                Logger.log(f"Saved new values! [{' -> '.join(values)}]")
+                Logger.log(f"Saved new values! [{settings}]")
                 # queue_alert_message(self.references, "Saved new values!")
 
             # Reset from real saved value
             else:
-                Logger.log(f"Invalid value entered! [{' -> '.join(values)}]")
+                Logger.log(f"Invalid value entered! [{settings}]")
                 queue_alert_message(self.references, "Invalid value entered!", warning=True)
-                tk_var[0].set(str(temp if (temp := feature["value"][0]) else ""))
-                tk_var[1].set(str(temp if (temp := feature["value"][1]) else ""))
+                for var_name, var_obj in tk_var.items():
+                    var_obj.set((str(temp if (temp := feature["settings"][var_name]) is not None else "")))
 
             self.open = False
 

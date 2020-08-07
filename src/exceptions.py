@@ -52,7 +52,7 @@ def handle_error(references: dict):
         f.write(msg)
 
     # If available, notify
-    if "RootThread" in references:
+    if "Root" in references:
         messagebox.showerror(title="Fatal Error", message="Something bad happened! Check crash_log.txt for more insight!")
 
     # Kill all
