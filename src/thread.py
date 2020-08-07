@@ -78,7 +78,7 @@ class Thread(threading.Thread):
                     task = self.queue.pop(0)
 
                     # Attribute of thread
-                    if isinstance("cmd", str):
+                    if isinstance(task["cmd"], str):
                         return_value = getattr(self, task["cmd"])(*task["params"], **task["kwargs"])
 
                     # Callable method

@@ -349,9 +349,9 @@ class Features:
                 :param default_key: the key to access the presets
                 :param override: if to use the default key as the new value
                 """
-                if key not in feature_value or not feature_value[key]:
+                if key not in feature_value:  # or not feature_value[key]:
                     feature_value.update(
-                        {key: override if override else features.presets[feature_id][default_key]})
+                        {key: default_key if override else features.presets[feature_id][default_key]})
 
             # Default values
             set_default("name", "n")
@@ -436,11 +436,22 @@ class Settings:
                 "d": 2000,
                 "n": "Attach cooldown"
             },
+            "exit_all": {
+                "d": True,
+                "n": "Exit all"
+            }
             # "clear_features": {  # TODO part of the Features rewrite
             #     "d": lambda e: print("test"),  # If method, it is a "action button"
             #     "n": "Clear stored features"
             # }
         }
+
+    def __getitem__(self, item) -> dict:
+        """ Magic operator for getting a setting by name
+        :param item: the setting name / id
+        :returns: (dict) the setting value
+        """
+        return self.data[item]
 
     @property
     def for_json(self) -> dict:
@@ -568,20 +579,19 @@ class Storage:
                 ui.queue_quit_message(self.references, f"Invalid storage file! {e.message}", "Fatal Error")
                 return
 
-            self.ready = True
-
         # Settings: Start minimized
-        if self.data["settings"]["start_minimized"]:
+        if self.settings["start_minimized"]:
             self.references["RootThread"].queue.append(
                 {"cmd": "hide", "params": [], "kwargs": {}, "wait_for_render": True})
 
         # Settings: Auto start
-        if self.data["settings"]["auto_attach"]:
+        if self.settings["auto_attach"]:
             self.references["RootThread"].queue.append(
                 {"cmd": lambda: self.references["ProcessingThread"].queue.append(
                     {"cmd": "start_button_handle", "params": [None], "kwargs": {}}
                 ), "params": [], "kwargs": {}, "wait_for_render": True})
 
+        self.ready = True
         Logger.log("Storage", add=True)
 
     def validate(self, given: dict, check: dict) -> bool:
@@ -620,6 +630,9 @@ class Storage:
             # Save settings
             if self.settings:
                 self.set("settings", self.settings.for_json)
+
+            if self.features:
+                self.set("features", self.features.for_json)
 
             with open(self.STORAGE_PATH, "w+") as f:
                 f.seek(0)

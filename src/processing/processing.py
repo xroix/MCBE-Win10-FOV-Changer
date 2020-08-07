@@ -349,6 +349,7 @@ class Gateway(pymem.Pymem):
         """ Checks if the addresses for the discord rich presence are available
         """
         if "3" in self.storage.features.addresses:
+            self.get_server()
             try:
                 if self.fallback_server_address:
                     self.read_string(self.fallback_server_address, 253)
@@ -358,6 +359,7 @@ class Gateway(pymem.Pymem):
 
             # Something happened
             except (pymem.exception.MemoryReadError, UnicodeDecodeError, Exception):
+                Logger.log(f"{self.storage.features['3']['name']} is unavailable!", add=False)
                 return False
 
             return True
@@ -366,17 +368,17 @@ class Gateway(pymem.Pymem):
         else:
             return None
 
-    def get_server(self, *, address=None):
+    def get_server(self):
         """ Returns the currently connected server
         :returns: the server or None
         """
         if "3" in self.storage.features.addresses:
             try:
-                # Use normal address
-                if address and not self.fallback_server_address:
-                    self.fallback_server_address = address
+                # Use fallback address if needed
+                if self.fallback_server_address:
+                    address = self.fallback_server_address
 
-                if not address:
+                else:
                     address = self.storage.features.addresses["3"]
 
                 server = self.read_string(address, 253)
@@ -390,9 +392,6 @@ class Gateway(pymem.Pymem):
 
             # Need to read fallback value
             except (pymem.exception.MemoryReadError, UnicodeDecodeError, Exception):
-                if address != self.storage.features.addresses["3"]:
-                    return None
-
                 if not self.fallback_server_address:
                     a = self.read_uint(self.storage.features.addresses["3"])
                     b = self.read_uint(self.storage.features.addresses["3"] + 4)
@@ -400,7 +399,8 @@ class Gateway(pymem.Pymem):
                     self.fallback_server_address = int(str(hex(b))[2:] + str(hex(a))[2:], 16)
 
                 try:
-                    return self.read_string(self.fallback_server_address, 253)
+                    server = self.read_string(self.fallback_server_address, 253)
+                    return server
 
                 except (pymem.exception.MemoryReadError, UnicodeDecodeError, Exception):
                     return None

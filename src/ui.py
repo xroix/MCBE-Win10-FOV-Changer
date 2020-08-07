@@ -222,9 +222,13 @@ class Root(tk.Tk):
     def hide(self):
         """ Hides the root (withdraws it)
         """
-        self.withdraw()
-        self.feature_edit_manager.hide_all()
-        self.references["Storage"].update_file()
+        if self.storage.settings["exit_all"]:
+            self.references["SystemTray"].stop_tray()
+
+        else:
+            self.withdraw()
+            self.feature_edit_manager.hide_all()
+            self.references["Storage"].update_file()
 
     def queue_update(self):
         """ Run every 500 ms a new task from the queue
@@ -688,6 +692,7 @@ class Root(tk.Tk):
 
             # Reverse it because it's needed + save it
             feature_value["enabled"] = not state
+
             with self.storage.edited_lock:
                 self.storage.edited = True
 
@@ -700,7 +705,7 @@ class Root(tk.Tk):
         """ Save settings
         """
         if self.storage.settings.tk_vars:
-            settings = self.storage.get("settings")
+            settings = self.storage.settings.data
 
             for name, value in self.storage.settings.tk_vars.items():
                 try:
