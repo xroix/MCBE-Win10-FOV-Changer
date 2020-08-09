@@ -335,10 +335,12 @@ class Root(tk.Tk):
                                         cursor="hand2")
         self.start_button = tk.Button(start_button_wrapper, text="", font=(self.font, 11),
                                       takefocus=False, relief="flat", borderwidth=0, textvariable=self.start_button_var)
-        start_button_cmd = lambda e: self.references["ProcessingThread"].queue.append(
+        start_button_cmd = lambda e: (self.references["ProcessingThread"].queue.append(
             {"cmd": "start_button_handle", "params": [e], "kwargs": {}}
-        )
+        ))
         self.start_button.bind("<Button-1>", start_button_cmd)
+        # self.start_button.bind("<Enter>", lambda e: e.widget.configure(bg="#3A606E", fg="#ffffff"))
+        # self.start_button.bind("<Leave>", lambda e: e.widget.configure(bg="#ffffff", fg="#000000"))
         self.bind("<Return>", start_button_cmd)
         self.start_button.pack(fill="both")
         start_button_wrapper.grid(column=0, row=0, sticky="ew", padx=20, pady=25)
@@ -379,6 +381,10 @@ class Root(tk.Tk):
                          fg=colors[state],
                          bg="#f0f0f0")
             s.grid(column=0, row=x, sticky="e", ipadx=10, ipady=10)
+
+            if self.storage.features:
+                if name in self.storage.features.data:
+                    name = self.storage.features[name]["name"]
 
             t = tk.Label(self.status_frame, text=name, font=(self.font, 11), bg="#f0f0f0")
             t.grid(column=1, row=x, sticky="w", ipadx=0, ipady=10)
@@ -653,7 +659,7 @@ class Root(tk.Tk):
             .pack(padx=50, pady=0)
 
         ttk.Button(self.info_frame, text="Discord", takefocus=False,
-                   command=lambda: webbrowser.open("https://www.discord.com/invite/fF3NKpM", new=2)) \
+                   command=lambda: webbrowser.open("https://discord.gg/H3hex27", new=2)) \
             .pack(padx=50, pady=10)
 
         tk.Label(self.info_frame, text=f"v{VERSION}", font=("Consolas", 13)) \
@@ -697,7 +703,7 @@ class Root(tk.Tk):
                 self.storage.edited = True
 
             # Update status
-            if feature_value["name"] in self.references["Gateway"].status:
+            if feature_id in self.references["Gateway"].status:
                 self.references["ProcessingThread"].queue.append(
                     {"cmd": self.references["Gateway"].status_check, "params": [], "kwargs": {}})
 

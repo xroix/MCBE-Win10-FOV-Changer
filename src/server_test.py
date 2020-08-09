@@ -6,7 +6,14 @@ import pypresence
 import pymem
 from pymem.ptypes import RemotePointer
 
-server_p = [0x036DB9B8, 0x8, 0x8, 0x1F8, 0x4F0, 0x18, 0x50, 0x370]
+server_p = [
+                57550056,
+                8,
+                0,
+                488,
+                880,
+                0
+            ]
 client_id = "733376215737434204"
 
 

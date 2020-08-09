@@ -213,10 +213,12 @@ class Features:
                 "g": ZoomGroup,
                 "n": "FOV",  # Name
                 "k": "v",  # Key
+                "o_count": 1,  # Offsets count
                 "a_type": "float",  # Type of address value, write out definition from pymem
+                "s_type": float,  # Type of settings (saved)
                 "s_default": {"before": None, "after": 30.0},  # Settings default value, used to determine type
                 "s_check": lambda values: all(not x or (29 < float(x) < 111) for x in values),  # Check for all settings
-                "s_decode": lambda new: round(new),  # Settings decode method for reading (encode for writing)
+                "s_decode": lambda old: round(old),  # Settings decode method for reading (encode for writing)
                 "c": ["1", "2"]  # Children
 
             },
@@ -224,7 +226,9 @@ class Features:
                 "g": ZoomGroup,
                 "n": "Hide Hand",
                 "k": None,
+                "o_count": 1,
                 "a_type": "int",
+                "s_type": int,
                 "s_default": {"before": 0, "after": 1},
                 "s_check": lambda values: all(not x or (-1 < int(x) < 2) for x in values),
                 "c": []
@@ -233,18 +237,22 @@ class Features:
                 "g": ZoomGroup,
                 "n": "Sensitivity",
                 "k": None,
+                "o_count": 1,
                 "a_type": "float",
+                "s_type": float,
                 "s_default": {"before": None, "after": 16.0},
                 "s_check": lambda values: all(not x or (0 <= float(x) <= 100) for x in values),
-                "s_encode": lambda old: 6873.479 + (3.000883e-7 - 6873.479) / (1 + (old / 235581800) ** 0.6125547),
-                "s_decode": lambda new: round(5331739 + (0.00002094196 - 5331739) / (1 + (new / 674.5356) ** 1.632673)),
+                "s_encode": lambda new: 6873.479 + (3.000883e-7 - 6873.479) / (1 + (new / 235581800) ** 0.6125547),
+                "s_decode": lambda old: round(5331739 + (0.00002094196 - 5331739) / (1 + (old / 674.5356) ** 1.632673)),
                 "c": []
             },
             "3": {
                 "g": DiscordGroup,
                 "n": "Discord",
+                "o_count": 2,
                 "a_type": "string",
                 "a_status_check": lambda gateway: gateway.server_address_check(),  # Override for checking for a address in status check
+                "s_type": bool,
                 "s_default": {"show_server": True, "show_version": True},
                 "c": []
             }
@@ -287,11 +295,9 @@ class Features:
 
         try:
             # Check settings values
-            setting_type = type([x for x in presets["s_default"].values() if x is not None][0])
-            temp = (setting_type(setting_value) for setting_value in settings.values() if setting_value is not None)
-
+            # setting_type = type([x for x in presets["s_default"].values() if x is not None][0])
+            temp = (presets["s_type"](setting_value) for setting_value in settings.values() if setting_value is not None)
             # Store setting_type for later use
-            presets.update({"s_type": setting_type})
 
             # Check if the values are in correct shape
             if "s_check" in presets and not presets["s_check"](list(settings.values())):
@@ -349,7 +355,7 @@ class Features:
                 :param default_key: the key to access the presets
                 :param override: if to use the default key as the new value
                 """
-                if key not in feature_value:  # or not feature_value[key]:
+                if key not in feature_value or (key in feature_value and not feature_value[key] and feature_value[key] is not False):  # or not feature_value[key]:
                     feature_value.update(
                         {key: default_key if override else features.presets[feature_id][default_key]})
 
@@ -361,16 +367,19 @@ class Features:
                 set_default("key", "k")
 
             set_default("settings", "s_default")
-
             set_default("children", "c")
 
-            # Hard coded "security" checks
-            # only if feature is available for our version
+            # Only if feature is available for our version
             if feature_value["available"]:
 
                 # Correct value type?
                 if not cls.check_settings(features, feature_id, feature_value):
                     raise MessageHandlingError(f"Invalid settings for feature '{feature_id}'")
+
+                # Correct number of offsets?
+                if "offsets" in feature_value and 1 != features.presets[feature_id]["o_count"] != len(
+                        feature_value["offsets"]):
+                    raise MessageHandlingError(f"Invalid number of offsets for feature '{feature_id}'")
 
         return old_features
 

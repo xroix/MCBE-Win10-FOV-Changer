@@ -71,7 +71,7 @@ class ProcessingThread(thread.Thread):
         """
         Logger.log("ProcessingThread", add=False)
 
-    @thread.Thread.schedule(seconds=2)
+    @thread.Thread.schedule(seconds=1)
     def update_storage_file(self):
         """ Update storage file
         """
@@ -81,7 +81,7 @@ class ProcessingThread(thread.Thread):
             with self.storage.edited_lock:
                 self.storage.edited = False
 
-    @thread.Thread.schedule(seconds=2)
+    @thread.Thread.schedule(seconds=1)
     def update_listener_keys(self):
         """ Update listener keys
         """
@@ -96,10 +96,31 @@ class ProcessingThread(thread.Thread):
     def update_rich_presence(self):
         """ Update rich presence
         """
+        # Features created
         if self.storage.features:
-            if self.storage.features["3"]["enabled"] and self.storage.features["3"]["available"]:
-                self.discord.update(bool(self.gateway.process_handle), self.gateway.get_server(),
-                                    self.gateway.current_mc_version)
+            # Feature enabled?
+            if self.storage.features["3"]["enabled"]:
+                if "3" in self.gateway.status and not self.gateway.status["3"]:
+                    self.gateway.status["3"] = self.gateway.server_address_check(log=False)
+
+                    # Update ui
+                    self.references["RootThread"].queue.append(
+                        {"cmd": "render_status", "params": [self.gateway.status], "kwargs": {}})
+
+                    # Because it can be, that it wasn't updated once
+                    if not self.gateway.status["3"]:
+                        self.discord.update(bool(self.gateway.process_handle), None,
+                                            self.gateway.current_mc_version)
+
+                else:
+                    # Can show server?
+                    if self.storage.features["3"]["available"]:
+                        self.discord.update(bool(self.gateway.process_handle), self.gateway.get_server(),
+                                            self.gateway.current_mc_version)
+
+                    else:
+                        self.discord.update(bool(self.gateway.process_handle), None,
+                                            self.gateway.current_mc_version)
 
     def start_button_handle(self, e):
         """ Starts or stops gateway and checks version
@@ -125,23 +146,28 @@ class ProcessingThread(thread.Thread):
                 def callback():
                     """ End of the start part, own method, so it can be invoked after the creation of features tab
                     """
-                    # Get addresses
-                    self.gateway.get_addresses()
+                    try:
+                        # Get addresses
+                        self.gateway.get_addresses()
 
-                    # Set up and start listener
-                    self.listener = listener.Listener(self.references)
-                    self.listener.register_keys()
-                    self.listener.start()
+                        # Set up and start listener
+                        self.listener = listener.Listener(self.references)
+                        self.listener.register_keys()
+                        self.listener.start()
 
-                    # Change start and tray button
-                    self.references["SystemTray"].states["Enabled"] = True
-                    self.references["SystemTray"].tray.update_menu()
-                    root.start_button_var.set("■ Stop")
+                        # Change start and tray button
+                        self.references["SystemTray"].states["Enabled"] = True
+                        self.references["SystemTray"].tray.update_menu()
+                        root.start_button_var.set("■ Stop")
 
-                    # Cooldown, need to copy
-                    root.after(self.storage.get("settings")["attach_cooldown"],
-                               (lambda: button.configure(state="active")))
-                    root.config(cursor="arrow")
+                        # Cooldown, need to copy
+                        root.after(self.storage.get("settings")["attach_cooldown"],
+                                   (lambda: button.configure(state="active")))
+                        root.config(cursor="arrow")
+
+                    except (pymem.exception.ProcessNotFound, pymem.exception.WinAPIError) as e:
+                        Logger.log(f"Minecraft not found! {e}")
+                        ui.queue_alert_message(self.references, "Minecraft not found!", warning=True)
 
                 self.gateway.open_process_from_name("Minecraft.Windows.exe")
                 self.gateway.status_check()
@@ -161,7 +187,7 @@ class ProcessingThread(thread.Thread):
 
                         return
 
-                    # If something went wrong
+                    # If something went wrong, error got displayed inside .fetch_features
                     else:
                         self.gateway.close_process()
                         self.gateway.status_check()
@@ -225,31 +251,46 @@ class Gateway(pymem.Pymem):
         # Finish
         self.references.update({"Gateway": self})
 
-    def get_address(self, feature_id: str):
+    def get_address(self, feature_id: str, *, log=True):
         """ Get one address
         :param feature_id: the id of the following feature
+        :param log: if to log getting the address
         """
         feature = self.storage.features[feature_id]
-        offs = feature["offsets"]
+        presets = self.storage.features.presets[feature_id]
+        addresses = self.storage.features.addresses
+        offset_outer = feature["offsets"]
 
         try:
-            # Find the address
-            temp = RemotePointer(self.process_handle, self.process_base.lpBaseOfDll + offs[0])
+            # If only one offset, so prepare list
+            if presets["o_count"] == 1 or not isinstance(offset_outer, list):
+                offset_outer = [offset_outer]
 
-            for offset in offs[1:-1]:
-                temp = RemotePointer(self.process_handle, temp.value + offset)
+            addresses.update({feature_id: []})
 
-            self.storage.features.addresses.update({feature_id: temp.value + offs[-1]})
+            for i, offs in enumerate(offset_outer):
+                # Find the address
+                temp = RemotePointer(self.process_handle, self.process_base.lpBaseOfDll + offs[0])
+
+                for offset in offs[1:-1]:
+                    temp = RemotePointer(self.process_handle, temp.value + offset)
+
+                # Add it
+                addresses[feature_id].append(temp.value + offs[-1])
+
+                if log:
+                    Logger.log(f"Found {i}. address for {feature['name']} [{hex(self.storage.features.addresses[feature_id][i])}]!", add=True)
+
             status = True
-
-            Logger.log(f"Found address for {feature['name']}!", add=True)
 
         except pymem.exception.MemoryReadError:
             status = False
-            Logger.log(f"No address for {feature['name']}!", add=False)
+
+            if log:
+                Logger.log(f"No address for {feature['name']}!", add=False)
 
         self.status.update({
-            feature["name"]: status
+            feature_id: status
         })
 
     def get_addresses(self):
@@ -281,7 +322,7 @@ class Gateway(pymem.Pymem):
 
                 else:
                     self.status.update({
-                        _feature_value["name"]: None
+                        _feature_id: None
                     })
 
         done = set()
@@ -300,16 +341,18 @@ class Gateway(pymem.Pymem):
         self.status_check()
         self.storage.update_file()
 
-    def read_address(self, feature_id: str):
+    def read_address(self, feature_id: str, *, index: int = 0):
         """ Read a address based on its feature id
             Also decodes the new value
         :param feature_id: (str) id of the feature requested
+        :param index: (int) which address should be used (1 feature can have multiple offsets)
         """
         if feature_id in self.storage.features.addresses:
             presets = self.storage.features.presets[feature_id]
 
             # Read and cast
-            value = getattr(self, f"read_{presets['a_type']}")(self.storage.features.addresses[feature_id])
+            value = getattr(self, f"read_{presets['a_type']}")(self.storage.features.addresses[feature_id][index],
+                                                               **(presets["a_args"] if "a_args" in presets else {}))
 
             # If it needs to be decoded
             if "s_decode" in presets:
@@ -317,11 +360,12 @@ class Gateway(pymem.Pymem):
 
             return value
 
-    def write_address(self, feature_id: str, new):
+    def write_address(self, feature_id: str, new, *, index: int = 0):
         """ Read a address based on its feature id,
             Also encodes the new value
         :param feature_id: (str) id of the feature requested
         :param new: the new value written
+        :param index: (int) which address should be used (1 feature can have multiple offsets)
         """
         if feature_id in self.storage.features.addresses:
             presets = self.storage.features.presets[feature_id]
@@ -334,7 +378,8 @@ class Gateway(pymem.Pymem):
                 new = self.storage.features.presets[feature_id]["s_encode"](new)
 
             # Write
-            return getattr(self, f"write_{presets['a_type']}")(self.storage.features.addresses[feature_id], new)
+            return getattr(self, f"write_{presets['a_type']}")(self.storage.features.addresses[feature_id][index], new,
+                                                               **(presets["a_args"] if "a_args" in presets else {}))
 
     def is_domain(self, domain: str) -> bool:
         """ Tests if given domain is valid
@@ -345,21 +390,35 @@ class Gateway(pymem.Pymem):
 
         return True
 
-    def server_address_check(self):
+    def server_address_check(self, *, log=True):
         """ Checks if the addresses for the discord rich presence are available
+        :param log: if to log messages
         """
         if "3" in self.storage.features.addresses:
-            self.get_server()
+            if not self.process_handle:
+                return None
+
+            self.get_server()  # Load fallback address if needed
+
             try:
+                # Server port
+                if self.read_int(self.storage.features.addresses["3"][1]) == 0:
+                    return None
+
+                # Server ip
                 if self.fallback_server_address:
                     self.read_string(self.fallback_server_address, 253)
 
-                else:
-                    self.read_string(self.storage.features.addresses["3"], 253)
+                elif (address := self.storage.features.addresses["3"][0]) == 0:
+                    return None
 
-            # Something happened
-            except (pymem.exception.MemoryReadError, UnicodeDecodeError, Exception):
-                Logger.log(f"{self.storage.features['3']['name']} is unavailable!", add=False)
+                else:
+                    self.read_string(address, 253)
+
+            # Something happened, but is not 100% sure
+            except (pymem.exception.MemoryReadError, UnicodeDecodeError, Exception) as e:
+                if log:
+                    Logger.log(f"Discord is unavailable!", add=False)
                 return False
 
             return True
@@ -368,18 +427,39 @@ class Gateway(pymem.Pymem):
         else:
             return None
 
+    def get_fallback_server_address(self) -> int:
+        """ Returns the fallback address for the connected server
+        :returns: the address
+        """
+        a = self.read_uint(self.storage.features.addresses["3"][0])
+        b = self.read_uint(self.storage.features.addresses["3"][0] + 4)
+
+        return int(str(hex(b))[2:] + str(hex(a))[2:].zfill(8), 16)
+
     def get_server(self):
-        """ Returns the currently connected server
+        """ Returns the currently connected server:port
         :returns: the server or None
         """
         if "3" in self.storage.features.addresses:
             try:
+                port = self.read_int(self.storage.features.addresses["3"][1])
+
+                # Zero means no server connected
+                if port == 0:
+                    return None
+
                 # Use fallback address if needed
                 if self.fallback_server_address:
                     address = self.fallback_server_address
 
                 else:
-                    address = self.storage.features.addresses["3"]
+                    address = self.storage.features.addresses["3"][0]
+
+                # Means it wasn't connected the first time
+                # try to get address again
+                if address == 0:
+                    self.get_address("3", log=False)
+                    return None
 
                 server = self.read_string(address, 253)
 
@@ -388,21 +468,35 @@ class Gateway(pymem.Pymem):
                     raise Exception
 
                 else:
-                    return server
+                    if port == 19132:
+                        return server
+                    else:
+                        return f"{server}:{port}"
 
             # Need to read fallback value
-            except (pymem.exception.MemoryReadError, UnicodeDecodeError, Exception):
-                if not self.fallback_server_address:
-                    a = self.read_uint(self.storage.features.addresses["3"])
-                    b = self.read_uint(self.storage.features.addresses["3"] + 4)
-
-                    self.fallback_server_address = int(str(hex(b))[2:] + str(hex(a))[2:], 16)
-
+            # Sometimes, even this fallback value failes, however, again, sometimes, by joining another server, it works again?
+            except (pymem.exception.MemoryReadError, pymem.exception.WinAPIError, UnicodeDecodeError, Exception):
                 try:
-                    server = self.read_string(self.fallback_server_address, 253)
-                    return server
+                    # Reread port
+                    port = self.read_int(self.storage.features.addresses["3"][1])
 
-                except (pymem.exception.MemoryReadError, UnicodeDecodeError, Exception):
+                    # If not done already, get fallback server address
+                    if not self.fallback_server_address:
+                        self.fallback_server_address = self.get_fallback_server_address()
+
+                    server = self.read_string(self.fallback_server_address, 253)
+
+                    if port == 19132:
+                        return server
+
+                    else:
+                        return f"{server}:{port}"
+
+                # Fallback failed, try to read orignial address again
+                except (pymem.exception.MemoryReadError, pymem.exception.WinAPIError, UnicodeDecodeError, Exception):
+                    # Logger.log("Server fallback address failed!")
+                    self.fallback_server_address = None
+                    self.get_address("3", log=False)
                     return None
 
         return None
@@ -418,12 +512,12 @@ class Gateway(pymem.Pymem):
 
         if self.storage.features:
             # Addresses
-            for addr_id, addr_value in self.storage.features.addresses.items():
+            for addr_id, addr_value in {_id: _addr for _id, sublist in self.storage.features.addresses.items() for _addr in sublist}.items():
                 feature = self.storage.features[addr_id]
 
                 try:
                     # Not enabled or not available
-                    if not feature["enabled"] or not feature["available"]:
+                    if not feature["enabled"] or not feature["available"] or not self.process_handle:
                         status = None
 
                     # Custom check
@@ -432,16 +526,15 @@ class Gateway(pymem.Pymem):
 
                     # Else just try to read
                     else:
-                        if self.process_handle:
-                            self.read_address(addr_id)
+                        self.read_address(addr_id)
 
                         status = True
 
-                    self.status[feature["name"]] = status
+                    self.status[addr_id] = status
 
                 except pymem.exception.MemoryReadError:
                     Logger.log(f"{feature['name']} is unavailable!", add=False)
-                    self.status[feature["name"]] = False
+                    self.status[addr_id] = False
 
         # Update ui
         self.references["RootThread"].queue.append(

@@ -1,7 +1,7 @@
 import pymem
 from pynput import keyboard
 
-from src import ui
+from src import ui, exceptions
 from src.logger import Logger
 
 
@@ -70,40 +70,44 @@ class Listener(keyboard.Listener):
         :param index: new setting index
         :param on_press: (bool) if from on press
         """
-        # Normalize the key code
-        if isinstance(key, keyboard.KeyCode):
-            code = self.unctrl(key.vk).lower()
+        try:
+            # Normalize the key code
+            if isinstance(key, keyboard.KeyCode):
+                code = self.unctrl(key.vk).lower()
 
-            # Key exists?
-            if code in self.keys:
+                # Key exists?
+                if code in self.keys:
 
-                # First press?
-                if (code in self.pressed) is not on_press or self.pressed[code] is not on_press:
-                    self.pressed.update({code: on_press})
+                    # First press?
+                    if (code in self.pressed) is not on_press or self.pressed[code] is not on_press:
+                        self.pressed.update({code: on_press})
 
-                    # Do memory stuff
-                    for feature_id in self.keys[code]:
-                        feature_value = self.features[feature_id]
+                        # Do memory stuff
+                        for feature_id in self.keys[code]:
+                            feature_value = self.features[feature_id]
 
-                        # Enabled?
-                        if not feature_value["enabled"]:
-                            continue
+                            # Enabled?
+                            if not feature_value["enabled"]:
+                                continue
 
-                        try:
-                            self.gateway.write_address(feature_id, feature_value["settings"][index])
+                            try:
+                                self.gateway.write_address(feature_id, feature_value["settings"][index])
 
-                        # Minecraft was closed
-                        except pymem.exception.MemoryWriteError:
-                            self.gateway.close_process()
-                            self.gateway.status_check()
+                            # Minecraft was closed
+                            except pymem.exception.MemoryWriteError:
+                                self.gateway.close_process()
+                                self.gateway.status_check()
 
-                            # Alert user
-                            Logger.log("Minecraft was closed!")
-                            ui.queue_alert_message(self.references, "Minecraft was closed!", warning=True)
-                            self.references["Root"].bell()
-                            self.references["Root"].start_button_var.set("Start")
+                                # Alert user
+                                Logger.log("Minecraft was closed!")
+                                ui.queue_alert_message(self.references, "Minecraft was closed!", warning=True)
+                                self.references["Root"].bell()
+                                self.references["Root"].start_button_var.set("Start")
 
-                            return self.stop()
+                                return self.stop()
+
+        except Exception:
+            exceptions.handle_error(self.references)
 
     def on_press(self, key: keyboard.KeyCode):
         """ On press event
