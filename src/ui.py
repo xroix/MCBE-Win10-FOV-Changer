@@ -245,7 +245,7 @@ class Root(tk.Tk):
 
             else:
                 # Attribute of thread
-                if isinstance("cmd", str):
+                if isinstance(task["cmd"], str):  # Please save this fix, i dont want to release another time .-.
                     t = getattr(self, task["cmd"])(*task["params"], **task["kwargs"])
 
                 # Callable method

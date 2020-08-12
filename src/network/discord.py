@@ -19,6 +19,15 @@ class Discord:
         self.last_server = None
         self.last_time = None
 
+        self.partner_servers = {
+            "hivebedrock.network": "The Hive",
+            "inpvp.net": "Mineville",
+            "mineplex.com": "Mineplex",
+            "galaxite.net": "Galaxite",
+            "lbsg.net": "Lifeboat",
+            "cubecraft.net": "CubeCraft"
+        }
+
         self.feature = None
 
         # For ui
@@ -26,6 +35,14 @@ class Discord:
 
         # Add to references
         self.references.update({"Discord": self})
+
+    @staticmethod
+    def get_server_part(server) -> str:
+        """ Get the needed part from server ip / domain for the partner_servers hash table
+        :param server: server domain
+        :returns: needed part from server domain
+        """
+        return ".".join(server.split(".")[-1:-3:-1][::-1])
 
     def update(self, connected: bool, server: str, version: str):
         """ Updates the rich presence
@@ -49,6 +66,10 @@ class Discord:
 
             # Connected to server
             elif server:
+                # Check if server is partnered
+                if (part := self.get_server_part(server)) in self.partner_servers:
+                    server = self.partner_servers[part]
+
                 details = f"Playing {server}"
 
             # Main menu or private world todo
