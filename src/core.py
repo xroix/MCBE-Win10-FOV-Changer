@@ -125,15 +125,21 @@ class SystemTray:
         # Stop processing
         self.processing_thread.running = False
 
-        # Stop the GUI
-        try:
-            self.root_thread.root.deiconify()
-            self.root_thread.root.quit()
-            self.root_thread.join()
+        # Save storage
+        if "Storage" in self.references:
+            self.references["Storage"].update_file()
 
-        except RuntimeError:
+        if self.root_thread and self.root_thread.root:
+            # Stop the GUI
+            try:
+                self.root_thread.root.deiconify()
+                self.root_thread.root.quit()
+                self.root_thread.join()
+
+            except RuntimeError:
+                sys.exit(0)
+
+        else:
             sys.exit(0)
 
-        # Save storage
-        self.references["Storage"].update_file()
 

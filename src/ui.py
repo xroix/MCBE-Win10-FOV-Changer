@@ -219,10 +219,14 @@ class Root(tk.Tk):
         # Add to references
         self.references.update({"Root": self})
 
-    def hide(self):
+    def hide(self, *, not_exit_all=False):
         """ Hides the root (withdraws it)
+        :param not_exit_all: if to not exit all
         """
-        if self.storage.settings["exit_all"]:
+        if not self.storage and "Storage" in self.references:
+            self.storage = self.references["Storage"]
+
+        if self.storage and self.storage.settings and self.storage.settings["exit_all"] and not not_exit_all:
             self.references["SystemTray"].stop_tray()
 
         else:
@@ -493,27 +497,31 @@ class Root(tk.Tk):
                 entry = None
                 _payload["key"] = None
 
-            # Edit Button
-            edit_button_wrapper = tk.Frame(self.feature_frame, width=96, height=29, cursor="hand2")
-            edit_button_wrapper.pack_propagate(0)
-            edit_button = ttk.Button(edit_button_wrapper, text="Edit", takefocus=False)
-            edit_button.bind("<Button-1>", lambda e: self.feature_edit_manager.open_feature(feature_id))
-            edit_button.pack(fill="both")
-            edit_button_wrapper.grid(column=2, row=i, sticky="w", padx=30, pady=pad_y)
+            if feature["available"] and features.presets[feature_id]["g"].edit_button:
+                # Edit Button
+                edit_button_wrapper = tk.Frame(self.feature_frame, width=96, height=29, cursor="hand2")
+                edit_button_wrapper.pack_propagate(0)
+                edit_button = ttk.Button(edit_button_wrapper, text="Edit", takefocus=False)
+                edit_button.bind("<Button-1>", lambda e: self.feature_edit_manager.open_feature(feature_id))
+                edit_button.pack(fill="both")
+                edit_button_wrapper.grid(column=2, row=i, sticky="w", padx=30, pady=pad_y)
+
+                # Top level for edit button
+                self.feature_edit_manager.add_feature(feature_id, feature, _payload)
+
+            else:
+                edit_button = None
 
             # If needed, disable
             if not feature["available"]:
                 enable_button.state(["disabled"])
-                edit_button.state(["disabled"])
+                if edit_button:
+                    edit_button.state(["disabled"])
 
                 _payload["enabled"].set(False)
 
                 if entry:
                     entry.state(["disabled"])
-
-            else:
-                # Top level for edit button
-                self.feature_edit_manager.add_feature(feature_id, feature, _payload)
 
             # Help url
             url = tk.Label(self.feature_frame, text="?", font=(self.font, 13), fg="#3A606E", cursor="hand2")
@@ -522,11 +530,16 @@ class Root(tk.Tk):
 
             return _payload
 
+        children = set()
+        for value in features.data.values():
+            if value["children"]:
+                children.update(value["children"])
+
         # Iter through features
         i = 0
         done = set()
         for key, f in features.data.items():
-            if key not in done:
+            if key not in done and key not in children:
                 payload.update({key: render(f, key, i)})
                 done.add(key)
 
@@ -535,10 +548,11 @@ class Root(tk.Tk):
                 # Create each child
                 if f["children"]:
                     for child_key in f["children"]:
-                        payload.update({child_key: render(features.data[child_key], child_key, i, child=True)})
-                        done.add(child_key)
+                        if child_key not in done:
+                            payload.update({child_key: render(features.data[child_key], child_key, i, child=True)})
+                            done.add(child_key)
 
-                        i += 1
+                            i += 1
 
         del done
 
@@ -807,23 +821,22 @@ class FeatureEditManager:
         :param feature: (dict) the feature
         :param payload: (dict) the payload
         """
-        if feature_id not in self.top_levels:
-            # Create Top Level
-            top = tk.Toplevel(self.root)
-            top.withdraw()
-            top.title(feature["name"])
-            top.tk.call('wm', 'iconphoto', top._w,
-                        ImageTk.PhotoImage(Image.open(storage.find_file("logo.ico", meipass=True))))
-            top.geometry(f"300x150+{self.root.winfo_x()}+{self.root.winfo_y()}")
-            top.resizable(False, False)
-            top.protocol("WM_DELETE_WINDOW", lambda: (self.hide(feature_id)))
-            # top.bind("<Return>", lambda e: self.save(feature_id))
+        # Create Top Level
+        top = tk.Toplevel(self.root)
+        top.withdraw()
+        top.title(feature["name"])
+        top.tk.call('wm', 'iconphoto', top._w,
+                    ImageTk.PhotoImage(Image.open(storage.find_file("logo.ico", meipass=True))))
+        top.geometry(f"300x150+{self.root.winfo_x()}+{self.root.winfo_y()}")
+        top.resizable(False, False)
+        top.protocol("WM_DELETE_WINDOW", lambda: (self.hide(feature_id)))
+        # top.bind("<Return>", lambda e: self.save(feature_id))
 
-            # Load content  based on feature group
-            self.storage.features.presets[feature_id]["g"].create_edit_button_widgets(manager=self, top=top, feature_id=feature_id, feature=feature, payload=payload)
+        # Load content  based on feature group
+        self.storage.features.presets[feature_id]["g"].create_edit_button_widgets(manager=self, top=top, feature_id=feature_id, feature=feature, payload=payload)
 
-            # Add it
-            self.top_levels.update({feature_id: top})
+        # Add it
+        self.top_levels.update({feature_id: top})
 
     def open_feature(self, feature_id: str):
         """ Open a specific feature top level

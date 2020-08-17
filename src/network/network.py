@@ -25,6 +25,7 @@ class Network:
 
         # Add to references
         self.references.update({"Network": self})
+        Logger.log("Network", add=True)
 
     def fetch_features(self, current_version: str) -> bool:
         """ Fetch the data from the api

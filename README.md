@@ -20,7 +20,7 @@ Features
     
  - **Discord** Rich Presence
     - Connected server
-    - Port (If not 192)
+    - Port (if not 19132)
     
 Download
 ---
@@ -29,3 +29,8 @@ Download
 Docs
 ---
 [Link](https://fov.xroix.me/docs )
+
+Discord
+---
+[Link](https://discord.gg/H3hex27 )
+

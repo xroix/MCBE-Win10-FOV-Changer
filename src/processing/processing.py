@@ -165,7 +165,7 @@ class ProcessingThread(thread.Thread):
                                    (lambda: button.configure(state="active")))
                         root.config(cursor="arrow")
 
-                    except (pymem.exception.ProcessNotFound, pymem.exception.WinAPIError) as e:
+                    except (pymem.exception.ProcessNotFound, pymem.exception.WinAPIError, pymem.exception.CouldNotOpenProcess) as e:
                         Logger.log(f"Minecraft not found! {e}")
                         ui.queue_alert_message(self.references, "Minecraft not found!", warning=True)
 
@@ -179,7 +179,7 @@ class ProcessingThread(thread.Thread):
 
                     # Fetch features, if it succeeded
                     if self.network.fetch_features(self.gateway.current_mc_version):
-
+                        print("Create")
                         # Create if it isn't already created
                         self.references["RootThread"].queue.append(
                             {"cmd": "create_tab_features", "params": [self.storage.features], "kwargs": {},
@@ -215,7 +215,7 @@ class ProcessingThread(thread.Thread):
                 self.references["SystemTray"].tray.update_menu()
                 root.start_button_var.set("Start")
 
-        except (pymem.exception.ProcessNotFound, pymem.exception.WinAPIError) as e:
+        except (pymem.exception.ProcessNotFound, pymem.exception.WinAPIError, pymem.exception.CouldNotOpenProcess) as e:
             Logger.log(f"Minecraft not found! {e}")
             ui.queue_alert_message(self.references, "Minecraft not found!", warning=True)
 
@@ -250,6 +250,7 @@ class Gateway(pymem.Pymem):
 
         # Finish
         self.references.update({"Gateway": self})
+        Logger.log("Gateway", add=True)
 
     def get_address(self, feature_id: str, *, log=True):
         """ Get one address

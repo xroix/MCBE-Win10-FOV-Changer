@@ -13,8 +13,12 @@ class Discord:
         """
         self.references = references
 
-        self.rpc = pypresence.Presence(client_id="733376215737434204", loop=loop)
-        self.rpc.connect()
+        try:
+            self.rpc = pypresence.Presence(client_id="733376215737434204", loop=loop)
+            self.rpc.connect()
+
+        except pypresence.InvalidPipe:
+            self.rpc = None
 
         self.last_server = None
         self.last_time = None
@@ -50,6 +54,13 @@ class Discord:
         :param server: server domain
         :param version: mc version
         """
+        # Discord not open
+        if not self.rpc:
+            if self.references["Gateway"].status:
+                self.references["Gateway"].status["3"] = False
+
+            return
+
         if not self.feature:
             self.feature = self.references["Storage"].features["3"]
 

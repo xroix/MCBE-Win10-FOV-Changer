@@ -11,7 +11,7 @@ from src import core
 
 
 VERSION = "1.1.4"
-DEBUG = False
+DEBUG = True
 
 
 if __name__ == '__main__':

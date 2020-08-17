@@ -591,7 +591,7 @@ class Storage:
         # Settings: Start minimized
         if self.settings["start_minimized"]:
             self.references["RootThread"].queue.append(
-                {"cmd": "hide", "params": [], "kwargs": {}, "wait_for_render": True})
+                {"cmd": "hide", "params": [], "kwargs": {"not_exit_all": True}, "wait_for_render": True})
 
         # Settings: Auto start
         if self.settings["auto_attach"]:
