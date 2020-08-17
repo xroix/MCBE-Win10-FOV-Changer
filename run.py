@@ -10,8 +10,8 @@ import pywintypes  # For fixing the 'DLL not found' error
 from src import core
 
 
-VERSION = "1.1.4"
-DEBUG = True
+VERSION = "1.1.5"
+DEBUG = False
 
 
 if __name__ == '__main__':

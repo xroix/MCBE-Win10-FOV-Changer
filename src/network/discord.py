@@ -2,6 +2,8 @@ import time
 
 import pypresence
 
+from src.logger import Logger
+
 
 class Discord:
     """ Handles the discord rich presence
@@ -17,6 +19,7 @@ class Discord:
             self.rpc = pypresence.Presence(client_id="733376215737434204", loop=loop)
             self.rpc.connect()
 
+        # Discord not open (or not installed)
         except pypresence.InvalidPipe:
             self.rpc = None
 
@@ -39,6 +42,7 @@ class Discord:
 
         # Add to references
         self.references.update({"Discord": self})
+        Logger.log("Discord", add=True)
 
     @staticmethod
     def get_server_part(server) -> str:
@@ -57,7 +61,7 @@ class Discord:
         # Discord not open
         if not self.rpc:
             if self.references["Gateway"].status:
-                self.references["Gateway"].status["3"] = False
+                self.references["Gateway"].status["3"] = None
 
             return
 

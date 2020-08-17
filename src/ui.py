@@ -226,7 +226,7 @@ class Root(tk.Tk):
         if not self.storage and "Storage" in self.references:
             self.storage = self.references["Storage"]
 
-        if self.storage and self.storage.settings and self.storage.settings["exit_all"] and not not_exit_all:
+        if self.storage and self.storage.settings and self.storage.settings["exit_all"] and not not_exit_all or not self.references["SystemTray"].tray.visible:
             self.references["SystemTray"].stop_tray()
 
         else:

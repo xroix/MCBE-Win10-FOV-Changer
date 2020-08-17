@@ -82,6 +82,9 @@ class SystemTray:
     def stop_tray(self, *args, **kwargs):
         """ Stop the tray
         """
+        if not self.tray.visible:
+            self.on_shutdown()
+
         self.tray.visible = False
         self.tray.stop()
 
@@ -139,7 +142,6 @@ class SystemTray:
             except RuntimeError:
                 sys.exit(0)
 
-        else:
-            sys.exit(0)
+        sys.exit(0)
 
 
