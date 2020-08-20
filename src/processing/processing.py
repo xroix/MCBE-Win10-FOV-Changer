@@ -2,6 +2,7 @@
 import builtins
 import os
 import string
+import subprocess
 import threading
 import time
 import asyncio
@@ -165,7 +166,8 @@ class ProcessingThread(thread.Thread):
                                    (lambda: button.configure(state="active")))
                         root.config(cursor="arrow")
 
-                    except (pymem.exception.ProcessNotFound, pymem.exception.WinAPIError, pymem.exception.CouldNotOpenProcess) as e:
+                    except (pymem.exception.ProcessNotFound, pymem.exception.WinAPIError,
+                            pymem.exception.CouldNotOpenProcess) as e:
                         Logger.log(f"Minecraft not found! {e}")
                         ui.queue_alert_message(self.references, "Minecraft not found!", warning=True)
 
@@ -174,7 +176,8 @@ class ProcessingThread(thread.Thread):
                 Logger.log("Attached to Minecraft!")
 
                 # Version check
-                if not self.gateway.check_version() or not self.storage.get("features") or not self.storage.features.data:
+                if not self.gateway.check_version() or not self.storage.get(
+                        "features") or not self.storage.features.data:
                     Logger.log("New feature offsets are needed!")
 
                     # Fetch features, if it succeeded
@@ -280,7 +283,9 @@ class Gateway(pymem.Pymem):
                 addresses[feature_id].append(temp.value + offs[-1])
 
                 if log:
-                    Logger.log(f"Found {i}. address for {feature['name']} [{hex(self.storage.features.addresses[feature_id][i])}]!", add=True)
+                    Logger.log(
+                        f"Found {i}. address for {feature['name']} [{hex(self.storage.features.addresses[feature_id][i])}]!",
+                        add=True)
 
             status = True
 
@@ -334,7 +339,6 @@ class Gateway(pymem.Pymem):
 
             if value["children"]:
                 for child_key in value["children"]:
-
                     # Parse child
                     inner(done, child_key, self.storage.features[child_key])
 
@@ -513,7 +517,8 @@ class Gateway(pymem.Pymem):
 
         if self.storage.features:
             # Addresses
-            for addr_id, addr_value in {_id: _addr for _id, sublist in self.storage.features.addresses.items() for _addr in sublist}.items():
+            for addr_id, addr_value in {_id: _addr for _id, sublist in self.storage.features.addresses.items() for _addr
+                                        in sublist}.items():
                 feature = self.storage.features[addr_id]
 
                 try:
@@ -541,23 +546,21 @@ class Gateway(pymem.Pymem):
         self.references["RootThread"].queue.append(
             {"cmd": "render_status", "params": [self.status], "kwargs": {}})
 
-    def get_mc_version(self) -> str:
-        """ Get current mc version by checking the 'AppxManifest.xml' file
+    @staticmethod
+    def get_mc_version() -> str:
+        """ Get current mc version by using a powshell command
         """
-        path = os.path.dirname(str(self.process_base.filename, "utf8"))
+        version = subprocess.check_output(
+            "powershell.exe Get-AppPackage -name Microsoft.MinecraftUWP | select -expandproperty Version").decode(
+            "utf8").rstrip()
 
-        # Test if it exists
-        if os.path.exists((file_path := os.path.join(path, "AppxManifest.xml"))):
-            # Parse it
-            with open(file_path, "r") as f:
-                version = f.read().split("<Identity")[1].split("Version=")[1].split('"')[1]
-
+        if version:
             Logger.log(f"Found MC Version '{version}'")
+
+            return version
 
         else:
             return ""
-
-        return version
 
     def check_version(self) -> bool:
         """ Check mc version if new features are required
