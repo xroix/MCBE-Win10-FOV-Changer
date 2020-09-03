@@ -1,6 +1,5 @@
 """ Handles verifying and fetching things out from an external service """
 
-import binascii
 import json
 
 import requests
@@ -90,7 +89,7 @@ class Network:
                 # Parse server response
                 self.storage.features = storage.Features.from_server_response(self.references, offs, saved_features=self.storage.features if self.storage.features else None)
 
-            except (json.JSONDecodeError, binascii.Error):
+            except json.JSONDecodeError:
                 Logger.log("Invalid response from server!")
                 ui.queue_alert_message(self.references, "Invalid response from server!", warning=True)
                 return False

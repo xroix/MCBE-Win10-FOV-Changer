@@ -4,11 +4,11 @@ block_cipher = None
 
 
 a = Analysis(['run.py'],
-             pathex=['C:\\Users\\xroix\\Desktop\\Coding\\Programming\\Python\\Other\\FOV-Changer'],
+             pathex=['.'],
              binaries=[],
-             datas=[('C:\\Users\\xroix\\Desktop\\Coding\\Programming\\Python\\Other\\FOV-Changer\\logo.ico', '.'),
-                    ('C:\\Users\\xroix\\Desktop\\Coding\\Programming\\Python\\Other\\FOV-Changer\\res\\logo-title.png', '.'),
-                    ('C:\\Users\\xroix\\Desktop\\Coding\\Programming\\Python\\Other\\FOV-Changer\\res\\logo-full.png', '.')],
+             datas=[('logo.ico', '.'),
+                    ('res\\logo-title.png', '.'),
+                    ('res\\logo-full.png', '.')],
              hiddenimports=['pkg_resources.py2_warn', 'pystray._win32'],
              hookspath=[],
              runtime_hooks=[],
@@ -33,4 +33,5 @@ exe = EXE(pyz,
           upx_exclude=[],
           runtime_tmpdir=None,
           console=False,
-		  icon="logo.ico")
+		  icon="logo.ico",
+		  version="file_version_info.txt")

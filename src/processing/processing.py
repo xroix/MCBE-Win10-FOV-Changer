@@ -550,9 +550,13 @@ class Gateway(pymem.Pymem):
     def get_mc_version() -> str:
         """ Get current mc version by using a powshell command
         """
+        startupinfo = subprocess.STARTUPINFO()
+        startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+
         version = subprocess.check_output(
-            "powershell.exe Get-AppPackage -name Microsoft.MinecraftUWP | select -expandproperty Version").decode(
-            "utf8").rstrip()
+            "powershell.exe Get-AppPackage -name Microsoft.MinecraftUWP | select -expandproperty Version",
+            stdin=subprocess.PIPE, stderr=subprocess.PIPE, startupinfo=startupinfo)\
+            .decode("utf8").rstrip()
 
         if version:
             Logger.log(f"Found MC Version '{version}'")
