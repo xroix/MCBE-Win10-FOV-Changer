@@ -170,7 +170,7 @@ class Root(tk.Tk):
         self.resizable(False, False)
         self.geometry("800x440")
         self.tk.call('wm', 'iconphoto', self._w,
-                     ImageTk.PhotoImage(Image.open(storage.find_file("logo.ico", meipass=True))))
+                     ImageTk.PhotoImage(Image.open(storage.find_file("res\\logo.ico", meipass=True))))
 
         # Used inside the queue_update()
         self.rendered = False
@@ -826,7 +826,7 @@ class FeatureEditManager:
         top.withdraw()
         top.title(feature["name"])
         top.tk.call('wm', 'iconphoto', top._w,
-                    ImageTk.PhotoImage(Image.open(storage.find_file("logo.ico", meipass=True))))
+                    ImageTk.PhotoImage(Image.open(storage.find_file("res\\logo.ico", meipass=True))))
         top.geometry(f"300x150+{self.root.winfo_x()}+{self.root.winfo_y()}")
         top.resizable(False, False)
         top.protocol("WM_DELETE_WINDOW", lambda: (self.hide(feature_id)))

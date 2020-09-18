@@ -40,7 +40,11 @@ def find_file(name, *, meipass=False) -> str:
     else:
         directory = os.path.dirname(sys.argv[0])
 
-    return os.path.join(directory, name)
+    # print(hasattr(sys, "frozen"))
+    # print(directory, " <-> ", name)
+    # print(os.path.abspath(name))
+
+    return os.path.abspath(os.path.join(directory, name))
 
 
 def find_dir(name):

@@ -33,7 +33,7 @@ class SystemTray:
 
         # Tray
         self.tray = None
-        self.icon_image = Image.open(storage.find_file("logo.ico", meipass=True))
+        self.icon_image = Image.open(storage.find_file("res\\logo.ico", meipass=True))
 
         # For actions
         self.states = {

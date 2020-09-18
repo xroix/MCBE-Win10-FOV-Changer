@@ -2,13 +2,13 @@
 
 Pillow == 7.1.0
 
-Pymem == git+https://github.com/srounet/Pymem.git
+git+https://github.com/srounet/Pymem.git
 
 pynput == 1.6.8
 
 pypresence == 4.0.0
 
-pystray == git+https://github.com/moses-palmer/pystray.git
+git+https://github.com/moses-palmer/pystray.git
 
 pywin32 == 228
 

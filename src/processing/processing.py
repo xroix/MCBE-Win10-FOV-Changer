@@ -554,7 +554,7 @@ class Gateway(pymem.Pymem):
         startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
 
         version = subprocess.check_output(
-            "powershell.exe Get-AppPackage -name Microsoft.MinecraftUWP | select -expandproperty Version",
+            "powershell.exe Get-AppxPackage -name Microsoft.MinecraftUWP | select -expandproperty Version",
             stdin=subprocess.PIPE, stderr=subprocess.PIPE, startupinfo=startupinfo)\
             .decode("utf8").rstrip()
 
