@@ -1,3 +1,3 @@
 @echo off
-pip install pyinstaller
+pyinstaller run.spec
 PAUSE
