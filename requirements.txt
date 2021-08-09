@@ -10,6 +10,6 @@ pypresence == 4.0.0
 
 git+https://github.com/moses-palmer/pystray.git
 
-pywin32 == 228
+pywin32 == 301
 
 requests == 2.24.0
