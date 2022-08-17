@@ -26,10 +26,6 @@ Download
 ---
 [Download directly](https://www.github.com/XroixHD/MCBE-Win10-FOV-Changer/releases/latest/download/FOV-Changer.zip )
 
-Docs
----
-[Link](https://fov.xroix.me/docs )
-
 Discord
 ---
 [Link](https://discord.gg/H3hex27 )
