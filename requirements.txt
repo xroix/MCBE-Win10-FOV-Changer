@@ -12,4 +12,4 @@ git+https://github.com/moses-palmer/pystray.git
 
 pywin32 == 301
 
-requests == 2.24.0
+requests == 2.31.0
