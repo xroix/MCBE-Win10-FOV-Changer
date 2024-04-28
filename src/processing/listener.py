@@ -113,18 +113,28 @@ class Listener(keyboard.Listener):
         except Exception:
             exceptions.handle_error(self.references)
 
+    def lerp(self, current, target, t):
+        """Linear interpolation between values a and b by parameter t."""
+        return current + (target - current) * t
+
     def change_fov_over_time(self, feature_id, desired_fov):
         """Gradually change FOV over time"""
         target_fov = int(desired_fov)
         current_fov = self.gateway.read_address(feature_id)
-        time_to_change = 0.2  # Time to change FOV (in seconds)
-        steps = 20  # Number of steps for smooth transition
-        increment = target_fov - current_fov
-        # Gradually change FOV over time
+        time_to_change = 0.1  # in seconds
+        steps = 200
+        
+        # perf_counter more accurate
+        start_time = time.perf_counter()
         for i in range(steps):
-            intermediate_fov = current_fov + (increment * (i / steps))
+            elapsed_time = time.perf_counter() - start_time
+            progress = min(1.0, elapsed_time / time_to_change)
+            intermediate_fov = self.lerp(current_fov, target_fov, progress)
             self.gateway.write_address(feature_id, intermediate_fov)
-            time.sleep(time_to_change / steps)
+            
+            # Wait until it's time for the next step
+            next_time = start_time + time_to_change * (i + 1) / steps
+            time.sleep(max(0, next_time - time.perf_counter()))
 
         # Ensure the final FOV is set
         self.gateway.write_address(feature_id, target_fov)
