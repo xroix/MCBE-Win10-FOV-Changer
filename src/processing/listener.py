@@ -114,11 +114,11 @@ class Listener(keyboard.Listener):
             exceptions.handle_error(self.references)
 
     def lerp(self, current, target, t):
-        """Linear interpolation between values a and b by parameter t."""
+        # Interpolate between values current and target by parameter t
         return current + (target - current) * t
 
     def change_fov_over_time(self, feature_id, desired_fov):
-        """Gradually change FOV over time"""
+        # Gradually change FOV over time
         target_fov = int(desired_fov)
         current_fov = self.gateway.read_address(feature_id)
         time_to_change = self.storage.get("settings")["fov_smooth_duration"] / 1000  # convert milliseconds to seconds
