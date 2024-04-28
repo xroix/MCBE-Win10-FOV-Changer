@@ -449,6 +449,18 @@ class Settings:
                 "d": 2000,
                 "n": "Attach cooldown"
             },
+            "fov_smooth": {
+                "d": True,
+                "n": "FOV smooth change?"
+            },
+            "fov_smooth_duration": {
+                "d": 100,
+                "n": "FOV smoothing duration (millisecond)"
+            },
+            "fov_smooth_steps": {
+                "d": 200,
+                "n": "FOV smoothing steps\n (high steps might be laggier)"
+            },
             "exit_all": {
                 "d": True,
                 "n": "Exit all"

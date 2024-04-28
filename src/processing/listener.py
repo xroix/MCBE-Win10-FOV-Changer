@@ -92,7 +92,7 @@ class Listener(keyboard.Listener):
                                 continue
 
                             try:
-                                if feature_id == "0":  # FOV change
+                                if feature_id == "0" and self.storage.get("settings")["fov_smooth"]:  # FOV change
                                     self.change_fov_over_time(feature_id, feature_value["settings"][index])
                                 else:
                                     self.gateway.write_address(feature_id, feature_value["settings"][index])
@@ -121,11 +121,11 @@ class Listener(keyboard.Listener):
         """Gradually change FOV over time"""
         target_fov = int(desired_fov)
         current_fov = self.gateway.read_address(feature_id)
-        time_to_change = 0.1  # in seconds
-        steps = 200
+        time_to_change = self.storage.get("settings")["fov_smooth_duration"] / 1000  # convert milliseconds to seconds
+        steps = self.storage.get("settings")["fov_smooth_steps"]
         
-        # perf_counter more accurate
-        start_time = time.perf_counter()
+        
+        start_time = time.perf_counter() # perf_counter more accurate
         for i in range(steps):
             elapsed_time = time.perf_counter() - start_time
             progress = min(1.0, elapsed_time / time_to_change)
