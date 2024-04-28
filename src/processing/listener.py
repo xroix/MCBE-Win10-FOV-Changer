@@ -4,6 +4,7 @@ from pynput import keyboard
 from src import ui, exceptions
 from src.logger import Logger
 
+import time
 
 class Listener(keyboard.Listener):
     """ Listener for key events
@@ -91,7 +92,10 @@ class Listener(keyboard.Listener):
                                 continue
 
                             try:
-                                self.gateway.write_address(feature_id, feature_value["settings"][index])
+                                if feature_id == "0":  # FOV change
+                                    self.change_fov_over_time(feature_id, feature_value["settings"][index])
+                                else:
+                                    self.gateway.write_address(feature_id, feature_value["settings"][index])
 
                             # Minecraft was closed
                             except (pymem.exception.MemoryWriteError, pymem.exception.ProcessError):
@@ -108,6 +112,22 @@ class Listener(keyboard.Listener):
 
         except Exception:
             exceptions.handle_error(self.references)
+
+    def change_fov_over_time(self, feature_id, desired_fov):
+        """Gradually change FOV over time"""
+        target_fov = int(desired_fov)
+        current_fov = self.gateway.read_address(feature_id)
+        time_to_change = 0.2  # Time to change FOV (in seconds)
+        steps = 20  # Number of steps for smooth transition
+        increment = target_fov - current_fov
+        # Gradually change FOV over time
+        for i in range(steps):
+            intermediate_fov = current_fov + (increment * (i / steps))
+            self.gateway.write_address(feature_id, intermediate_fov)
+            time.sleep(time_to_change / steps)
+
+        # Ensure the final FOV is set
+        self.gateway.write_address(feature_id, target_fov)
 
     def on_press(self, key: keyboard.KeyCode):
         """ On press event
