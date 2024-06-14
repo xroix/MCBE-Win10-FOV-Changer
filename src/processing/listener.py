@@ -4,6 +4,7 @@ from pynput import keyboard
 from src import ui, exceptions
 from src.logger import Logger
 
+import time
 
 class Listener(keyboard.Listener):
     """ Listener for key events
@@ -91,7 +92,10 @@ class Listener(keyboard.Listener):
                                 continue
 
                             try:
-                                self.gateway.write_address(feature_id, feature_value["settings"][index])
+                                if feature_id == "0" and self.storage.get("settings")["fov_smooth"]:  # FOV change
+                                    self.change_fov_over_time(feature_id, feature_value["settings"][index])
+                                else:
+                                    self.gateway.write_address(feature_id, feature_value["settings"][index])
 
                             # Minecraft was closed
                             except pymem.exception.MemoryWriteError:
@@ -108,6 +112,32 @@ class Listener(keyboard.Listener):
 
         except Exception:
             exceptions.handle_error(self.references)
+
+    def lerp(self, current, target, t):
+        # Interpolate between values current and target by parameter t
+        return current + (target - current) * t
+
+    def change_fov_over_time(self, feature_id, desired_fov):
+        # Gradually change FOV over time
+        target_fov = int(desired_fov)
+        current_fov = self.gateway.read_address(feature_id)
+        time_to_change = self.storage.get("settings")["fov_smooth_duration"] / 1000  # convert milliseconds to seconds
+        steps = self.storage.get("settings")["fov_smooth_steps"]
+        
+        
+        start_time = time.perf_counter() # perf_counter more accurate
+        for i in range(steps):
+            elapsed_time = time.perf_counter() - start_time
+            progress = min(1.0, elapsed_time / time_to_change)
+            intermediate_fov = self.lerp(current_fov, target_fov, progress)
+            self.gateway.write_address(feature_id, intermediate_fov)
+            
+            # Wait until it's time for the next step
+            next_time = start_time + time_to_change * (i + 1) / steps
+            time.sleep(max(0, next_time - time.perf_counter()))
+
+        # Ensure the final FOV is set
+        self.gateway.write_address(feature_id, target_fov)
 
     def on_press(self, key: keyboard.KeyCode):
         """ On press event
