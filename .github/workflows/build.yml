@@ -1,0 +1,26 @@
+name: Build FOV Changer
+run-name: Build FOV Changer
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+jobs:
+  Build:
+    runs-on: windows-latest
+    permissions: write-all
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4.1.1
+      - name: Bundle application
+        run: |
+          pip install -r requirements.txt -U pyinstaller
+          pyinstaller --clean run.spec
+          move LICENSE dist/LICENSE
+          move SOURCE_CODE dist/SOURCE_CODE
+          tree /f
+      - name: Upload as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: FOV-Changer
+          path: dist
