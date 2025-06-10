@@ -310,12 +310,12 @@ class Root(tk.Tk):
 
         # Logo
         self.logo_image = ImageTk.PhotoImage(
-            Image.open(storage.find_file("res\\logo-full.png", meipass=True)).resize((80, 80), Image.ANTIALIAS))
+            Image.open(storage.find_file("res\\logo-full.png", meipass=True)).resize((80, 80), Image.LANCZOS))
         tk.Label(header_frame, image=self.logo_image, borderwidth=0).pack(side="right", padx=3)
 
         # Title
         self.title_image = ImageTk.PhotoImage(
-            Image.open(storage.find_file("res\\logo-title.png", meipass=True)).resize((280, 70), Image.ANTIALIAS))
+            Image.open(storage.find_file("res\\logo-title.png", meipass=True)).resize((280, 70), Image.LANCZOS))
         tk.Label(header_frame, image=self.title_image, borderwidth=0).pack(side="right", padx=6)
 
         # Notification
@@ -664,7 +664,7 @@ class Root(tk.Tk):
         tk.Label(self.info_frame, text="Made by XroixHD", font=(self.font, 13)) \
             .pack(padx=50, pady=30)
 
-        ttk.Button(self.info_frame, text="Github", takefocus=False,
+        ttk.Button(self.info_frame, text="GitHub", takefocus=False,
                    command=lambda: webbrowser.open("https://www.github.com/XroixHD/MCBE-Win10-FOV-Changer", new=2)) \
             .pack(padx=50, pady=10)
 
