@@ -664,7 +664,7 @@ class Root(tk.Tk):
         tk.Label(self.info_frame, text="Made by XroixHD", font=(self.font, 13)) \
             .pack(padx=50, pady=30)
 
-        ttk.Button(self.info_frame, text="Github", takefocus=False,
+        ttk.Button(self.info_frame, text="GitHub", takefocus=False,
                    command=lambda: webbrowser.open("https://www.github.com/XroixHD/MCBE-Win10-FOV-Changer", new=2)) \
             .pack(padx=50, pady=10)
 
