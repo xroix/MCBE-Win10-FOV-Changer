@@ -421,7 +421,7 @@ class Gateway(pymem.Pymem):
                     self.read_string(address, 253)
 
             # Something happened, but is not 100% sure
-            except (pymem.exception.MemoryReadError, UnicodeDecodeError, Exception) as e:
+            except (pymem.exception.MemoryReadError, UnicodeDecodeError, Exception, pymem.exception.ProcessError) as e:
                 if log:
                     Logger.log(f"Discord is unavailable!", add=False)
                 return False
@@ -480,7 +480,7 @@ class Gateway(pymem.Pymem):
 
             # Need to read fallback value
             # Sometimes, even this fallback value failes, however, again, sometimes, by joining another server, it works again?
-            except (pymem.exception.MemoryReadError, pymem.exception.WinAPIError, UnicodeDecodeError, Exception):
+            except (pymem.exception.MemoryReadError, pymem.exception.WinAPIError, pymem.exception.ProcessError, UnicodeDecodeError, Exception):
                 try:
                     # Reread port
                     port = self.read_int(self.storage.features.addresses["3"][1])
@@ -498,7 +498,7 @@ class Gateway(pymem.Pymem):
                         return f"{server}:{port}"
 
                 # Fallback failed, try to read orignial address again
-                except (pymem.exception.MemoryReadError, pymem.exception.WinAPIError, UnicodeDecodeError, Exception):
+                except (pymem.exception.MemoryReadError, pymem.exception.WinAPIError, pymem.exception.ProcessError, UnicodeDecodeError, UnicodeDecodeError, Exception):
                     # Logger.log("Server fallback address failed!")
                     self.fallback_server_address = None
                     self.get_address("3", log=False)

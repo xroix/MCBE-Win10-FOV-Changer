@@ -310,12 +310,12 @@ class Root(tk.Tk):
 
         # Logo
         self.logo_image = ImageTk.PhotoImage(
-            Image.open(storage.find_file("res\\logo-full.png", meipass=True)).resize((80, 80), Image.ANTIALIAS))
+            Image.open(storage.find_file("res\\logo-full.png", meipass=True)).resize((80, 80), Image.LANCZOS))
         tk.Label(header_frame, image=self.logo_image, borderwidth=0).pack(side="right", padx=3)
 
         # Title
         self.title_image = ImageTk.PhotoImage(
-            Image.open(storage.find_file("res\\logo-title.png", meipass=True)).resize((280, 70), Image.ANTIALIAS))
+            Image.open(storage.find_file("res\\logo-title.png", meipass=True)).resize((280, 70), Image.LANCZOS))
         tk.Label(header_frame, image=self.title_image, borderwidth=0).pack(side="right", padx=6)
 
         # Notification
@@ -832,7 +832,7 @@ class FeatureEditManager:
         top.protocol("WM_DELETE_WINDOW", lambda: (self.hide(feature_id)))
         # top.bind("<Return>", lambda e: self.save(feature_id))
 
-        # Load content  based on feature group
+        # Load content based on feature group
         self.storage.features.presets[feature_id]["g"].create_edit_button_widgets(manager=self, top=top, feature_id=feature_id, feature=feature, payload=payload)
 
         # Add it
