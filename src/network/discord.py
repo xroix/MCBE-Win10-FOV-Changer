@@ -20,7 +20,7 @@ class Discord:
             self.rpc.connect()
 
         # Discord not open (or not installed)
-        except pypresence.InvalidPipe:
+        except Exception:
             self.rpc = None
 
         self.last_server = None
