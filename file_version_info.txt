@@ -1,7 +1,7 @@
 VSVersionInfo(
   ffi=FixedFileInfo(
-    filevers=(1, 1, 5, 0),
-    prodvers=(1, 1, 5, 0),
+    filevers=(1, 1, 7, 0),
+    prodvers=(1, 1, 7, 0),
     mask=0x3f,
     flags=0x0,
     OS=0x40004,
@@ -15,13 +15,13 @@ VSVersionInfo(
       StringTable(
         u'000004b0',
         [StringStruct(u'CompanyName', u'XroixHD'),
-        StringStruct(u'FileDescription', u'Zoom Mod for Mcbe Win10'),
-        StringStruct(u'FileVersion', u'1.1.5'),
+        StringStruct(u'FileDescription', u'Zoom mod for MCBE Windows 10'),
+        StringStruct(u'FileVersion', u'1.1.7'),
         StringStruct(u'InternalName', u'FOV-Changer.exe'),
-        StringStruct(u'LegalCopyright', u'Licensed under the MIT License - Copyright (C) 2020 XroixHD'),
+        StringStruct(u'LegalCopyright', u'Licensed under the MIT License - Copyright (C) 2024 XroixHD'),
         StringStruct(u'OriginalFilename', u'FOV-Changer.exe'),
         StringStruct(u'ProductName', u'FOV Changer'),
-        StringStruct(u'ProductVersion', u'1.1.5')])
+        StringStruct(u'ProductVersion', u'1.1.7')])
       ]), 
     VarFileInfo([VarStruct(u'Translation', [0, 1200])])
   ]

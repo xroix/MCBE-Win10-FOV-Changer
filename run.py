@@ -1,5 +1,5 @@
 """
-Copyright 2020 XroixHD
+Copyright 2024 XroixHD
 
 Main entry point that gets ported to an exe with pyinstaller
 """
@@ -7,7 +7,7 @@ Main entry point that gets ported to an exe with pyinstaller
 from src import core
 
 
-VERSION = "1.1.6-alpha"
+VERSION = "1.1.7-alpha"
 DEBUG = False
 
 
