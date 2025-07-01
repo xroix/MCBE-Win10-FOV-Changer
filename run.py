@@ -1,5 +1,5 @@
 """
-Copyright 2024 XroixHD
+Copyright 2020-2025 XroixHD
 
 Main entry point that gets ported to an exe with pyinstaller
 """

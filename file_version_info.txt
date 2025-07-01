@@ -18,7 +18,7 @@ VSVersionInfo(
         StringStruct(u'FileDescription', u'Zoom mod for MCBE Windows 10'),
         StringStruct(u'FileVersion', u'1.1.7'),
         StringStruct(u'InternalName', u'FOV-Changer.exe'),
-        StringStruct(u'LegalCopyright', u'Licensed under the MIT License - Copyright (C) 2024 XroixHD'),
+        StringStruct(u'LegalCopyright', u'Licensed under the MIT License - Copyright (C) 2020-2025 XroixHD'),
         StringStruct(u'OriginalFilename', u'FOV-Changer.exe'),
         StringStruct(u'ProductName', u'FOV Changer'),
         StringStruct(u'ProductVersion', u'1.1.7')])
