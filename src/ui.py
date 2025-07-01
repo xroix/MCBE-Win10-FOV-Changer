@@ -832,7 +832,7 @@ class FeatureEditManager:
         top.protocol("WM_DELETE_WINDOW", lambda: (self.hide(feature_id)))
         # top.bind("<Return>", lambda e: self.save(feature_id))
 
-        # Load content  based on feature group
+        # Load content based on feature group
         self.storage.features.presets[feature_id]["g"].create_edit_button_widgets(manager=self, top=top, feature_id=feature_id, feature=feature, payload=payload)
 
         # Add it

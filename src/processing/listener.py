@@ -94,7 +94,7 @@ class Listener(keyboard.Listener):
                                 self.gateway.write_address(feature_id, feature_value["settings"][index])
 
                             # Minecraft was closed
-                            except pymem.exception.MemoryWriteError:
+                            except (pymem.exception.MemoryWriteError, pymem.exception.ProcessError):
                                 self.gateway.close_process()
                                 self.gateway.status_check()
 
