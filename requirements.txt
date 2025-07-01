@@ -1,4 +1,4 @@
-pillow == 11.2.1
+pillow == 11.3.0
 
 Pymem == 1.14.0
 
