@@ -1,3 +1,5 @@
+<div align="center"><center>
+
 ![Logo](./res/logo-title-both.png)
 
 [![Downloads](https://testing.xroix.me/api/badges/latest-version)](https://testing.xroix.me/api/versions)
@@ -7,27 +9,29 @@
 
 A zoom mod for **Minecraft: Bedrock Edition** on Windows 10/11.
 
-*Join our [discord](https://discord.gg/H3hex27) for the latest information.*
+*[Join our discord](https://discord.gg/H3hex27) for the latest information.*
 
----
+</center></div>
 
 ## Features
 
 ### Customizable Zoom
 
 Ever wanted to see things at a distance? FOV-Changer lets you zoom in when pressing a keybind of your choice.
+
 ![Zoom Example](./res/example.gif)
 
 ### Discord Rich Presence
 
 Optionally, FOV-Changer will let you showcase currently connected servers on Discord!
+
 ![Discord Example](./res/discord.png)
 
 ### Supporting 90+ Minecraft Versions
 
 FOV-Changer has been updated to every new Minecraft version since 2020 (except beta and preview builds). When a new version is released, you will only have to start FOV-Changer as usual. As long as a dev has added the needed patch to the [database](https://github.com/xroix/fov-changer-db), it will automatically get everything it needs.
 
----
+
 
 ## Installation
 
@@ -35,7 +39,7 @@ You can use this [direct link](https://www.github.com/XroixHD/MCBE-Win10-FOV-Cha
 
 After downloading, extract the ZIP archive in order to run the executable `FOV-Changer.exe`. As of now, the FOV-Changer client must be opened and connected every time you play Minecraft.
 
----
+
 
 ## Developer Guide
 
@@ -92,7 +96,7 @@ Hence, FOV-Changer requests these pointers and their offsets every time it encou
 
 In the future, there will be more documentation on how to find new offsets so that more people can contribute to the collection.
 
----
+
 
 ## Disclaimer
 
