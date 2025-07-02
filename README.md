@@ -1,6 +1,6 @@
 <div align="center"><center>
 
-![Logo](./res/logo-title-both.png)
+![Logo](./res/banner.png)
 
 [![Downloads](https://testing.xroix.me/api/badges/latest-version)](https://testing.xroix.me/api/versions)
 [![Downloads](https://testing.xroix.me/api/badges/supported-versions)](https://testing.xroix.me/api/versions)
