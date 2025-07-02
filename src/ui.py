@@ -1,4 +1,5 @@
 """ UI stuff, uses tkinter for the GUI 5"""
+import ctypes
 import webbrowser
 import threading
 import tkinter as tk
@@ -7,6 +8,7 @@ import tkinter.font as tkf
 from tkinter import simpledialog, messagebox
 
 from PIL import Image, ImageTk
+import sv_ttk
 
 from run import VERSION
 from src import exceptions
@@ -163,6 +165,10 @@ class Root(tk.Tk):
         self.references = references
 
         self.storage = None
+
+        # Make the process DPI aware and hence not blurry
+        # TODO: It ignores Scaling, it stays the same size as without dpi awareness at 100%
+        ctypes.windll.shcore.SetProcessDpiAwareness(2)
 
         # Setting up tk stuff
         self.title("FOV Changer")
