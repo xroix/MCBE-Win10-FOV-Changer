@@ -1,8 +1,10 @@
 import time
+import logging
 
 import pypresence
 
-from src.logger import Logger
+
+logger = logging.getLogger(__name__)
 
 
 class Discord:
@@ -42,7 +44,7 @@ class Discord:
 
         # Add to references
         self.references.update({"Discord": self})
-        Logger.log("Discord", add=True)
+        logger.info("+ Discord")
 
     @staticmethod
     def get_server_part(server) -> str:

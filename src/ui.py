@@ -1,5 +1,6 @@
 """ UI stuff, uses tkinter for the GUI 5"""
 import ctypes
+import logging
 import webbrowser
 import threading
 import tkinter as tk
@@ -13,7 +14,9 @@ import sv_ttk
 from run import VERSION
 from src import exceptions
 from src.processing import storage
-from src.logger import Logger
+
+
+logger = logging.getLogger(__name__)
 
 
 def queue_alert_message(references: dict, msg: str, *, warning=False):
@@ -127,6 +130,7 @@ class RootThread(threading.Thread):
 
         # The root window (tkinter.TK)
         self.root = None
+        self.is_mainloop_running = False
 
         # Add thread to references
         self.references.update({"RootThread": self})
@@ -135,18 +139,25 @@ class RootThread(threading.Thread):
         """ Run method of thread
         """
         try:
-            Logger.log("Root Thread", add=True)
+            logger.info("+ Root Thread")
 
             # Initialize root and start the queue update
             self.root = Root(self.references)
             self.root.queue_update()
 
-            # Start mainloop
-            Logger.log("Root Gui", add=True)
-            self.root.mainloop()
-            Logger.log("Root Gui", add=False)
+            # Set flag right after mainloop is started
+            def set_mainloop_flag():
+                self.is_mainloop_running = True
 
-            Logger.log("Root Thread", add=False)
+            self.root.after(0, set_mainloop_flag)
+
+            # Start mainloop
+            logger.info("+ Root Gui")
+            self.root.mainloop()
+            self.is_mainloop_running = False
+            logger.info("- Root Gui")
+
+            logger.info("- Root Thread")
 
         # If something happens, log it
         except Exception as e:
@@ -280,10 +291,6 @@ class Root(tk.Tk):
         # Check return value
         if not isinstance(t, int):
             t = 2500
-
-        # Update logs
-        if Logger.queue:
-            Logger.write_all()
 
         self.after(500 + t, self.queue_update)
 
@@ -427,7 +434,7 @@ class Root(tk.Tk):
         # If there are features, render them
         if features := self.storage.features:
             self.create_tab_features(features)
-            Logger.log("Rendered Features!")
+            logger.info("Rendered Features!")
 
         # or just make a placeholder
         else:
@@ -439,7 +446,7 @@ class Root(tk.Tk):
 
         # Notebook Settings
         self.storage.settings.tk_vars = self.create_tab_settings()
-        Logger.log("Rendered Settings!")
+        logger.info("Rendered Settings!")
 
         # Notebook Log
         self.create_tab_log()
@@ -664,6 +671,9 @@ class Root(tk.Tk):
 
         scrollbar.config(command=self.log_text.yview)
 
+        # Register widget with logging
+        logging.getHandlerByName("gui").set_widget(self.references, self.log_text)
+
     def create_tab_info(self):
         """ Provides information about the current version, author and more
         """
@@ -742,11 +752,11 @@ class Root(tk.Tk):
                     settings[name] = value
 
                 except ValueError:
-                    Logger.log(msg := f"Invalid value for {' '.join(x[0].upper() + x[1:] for x in name.split('_'))}")
+                    logger.info(msg := f"Invalid value for {' '.join(x[0].upper() + x[1:] for x in name.split('_'))}")
                     queue_alert_message(self.references, msg, warning=True)
                     return
 
-            Logger.log("Saved new settings!")
+            logger.info("Saved new settings!")
             queue_alert_message(self.references, "Saved new settings!")
 
         self.storage.update_file()
@@ -877,12 +887,12 @@ class FeatureEditManager:
                 feature["settings"] = settings
                 self.references["Storage"].update_file()
 
-                Logger.log(f"Saved new values! [{settings}]")
+                logger.info(f"Saved new values! [{settings}]")
                 # queue_alert_message(self.references, "Saved new values!")
 
             # Reset from real saved value
             else:
-                Logger.log(f"Invalid value entered! [{settings}]")
+                logger.info(f"Invalid value entered! [{settings}]")
                 queue_alert_message(self.references, "Invalid value entered!", warning=True)
                 for var_name, var_obj in tk_var.items():
                     var_obj.set((str(temp if (temp := feature["settings"][var_name]) is not None else "")))

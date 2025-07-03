@@ -3,13 +3,16 @@ import builtins
 import json
 import os
 import sys
+import logging
 import threading
 import tkinter as tk
 import tkinter.ttk as ttk
 
 from src import ui
-from src.logger import Logger
 from src.exceptions import MessageHandlingError
+
+
+logger = logging.getLogger(__name__)
 
 
 def find_file(name, *, meipass=False) -> str:
@@ -586,7 +589,7 @@ class Storage:
         if self.data and self.data["features"]:
             try:
                 self.features = Features.from_storage_file(self.references, self.data["features"])
-                Logger.log("Stored features were loaded!")
+                logger.info("Stored features were loaded!")
 
             except MessageHandlingError as e:
                 ui.queue_quit_message(self.references, f"Invalid storage file! {e.message}", "Fatal Error")
@@ -605,7 +608,7 @@ class Storage:
                 ), "params": [], "kwargs": {}, "wait_for_render": True})
 
         self.ready = True
-        Logger.log("Storage", add=True)
+        logger.info("+ Storage")
 
     def validate(self, given: dict, check: dict) -> bool:
         """ Validate the storage file (recursive)

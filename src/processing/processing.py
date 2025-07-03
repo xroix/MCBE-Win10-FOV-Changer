@@ -6,15 +6,18 @@ import subprocess
 import threading
 import time
 import asyncio
+import logging
 
 import pymem
 from pymem.ptypes import RemotePointer
 
 from src import ui, thread
-from src.logger import Logger
 from src.network import network
 from src.network.discord import Discord
 from src.processing import storage, listener
+
+
+logger = logging.getLogger(__name__)
 
 
 class ProcessingThread(thread.Thread):
@@ -41,7 +44,7 @@ class ProcessingThread(thread.Thread):
     def at_start(self):
         """ Gets called before the loop
         """
-        Logger.log("ProcessingThread", add=True)
+        logger.info("+ ProcessingThread")
 
         # Create basic ui to be able to display events
         self.references["RootThread"].queue.append(
@@ -70,7 +73,7 @@ class ProcessingThread(thread.Thread):
     def at_end(self):
         """ Gets called after the loop
         """
-        Logger.log("ProcessingThread", add=False)
+        logger.info("- ProcessingThread")
 
     @thread.Thread.schedule(seconds=1)
     def update_storage_file(self):
@@ -168,17 +171,17 @@ class ProcessingThread(thread.Thread):
 
                     except (pymem.exception.ProcessNotFound, pymem.exception.WinAPIError,
                             pymem.exception.CouldNotOpenProcess) as e:
-                        Logger.log(f"Minecraft not found! {e}")
+                        logger.info(f"Minecraft not found! {e}")
                         ui.queue_alert_message(self.references, "Minecraft not found!", warning=True)
 
                 self.gateway.open_process_from_name("Minecraft.Windows.exe")
                 self.gateway.status_check()
-                Logger.log("Attached to Minecraft!")
+                logger.info("Attached to Minecraft!")
 
                 # Version check
                 if not self.gateway.check_version() or not self.storage.get(
                         "features") or not self.storage.features.data:
-                    Logger.log("New feature offsets are needed!")
+                    logger.info("New feature offsets are needed!")
 
                     # Fetch features, if it succeeded
                     if self.network.fetch_features(self.gateway.current_mc_version):
@@ -208,7 +211,7 @@ class ProcessingThread(thread.Thread):
             elif var.get() == "■ Stop":
                 self.gateway.close_process()
                 self.gateway.status_check()
-                Logger.log("Detached from Minecraft!")
+                logger.info("Detached from Minecraft!")
 
                 # Stop listener
                 self.listener.stop()
@@ -219,7 +222,7 @@ class ProcessingThread(thread.Thread):
                 root.start_button_var.set("Start")
 
         except (pymem.exception.ProcessNotFound, pymem.exception.WinAPIError, pymem.exception.CouldNotOpenProcess) as e:
-            Logger.log(f"Minecraft not found! {e}")
+            logger.info(f"Minecraft not found! {e}")
             ui.queue_alert_message(self.references, "Minecraft not found!", warning=True)
 
         # Cooldown
@@ -253,7 +256,7 @@ class Gateway(pymem.Pymem):
 
         # Finish
         self.references.update({"Gateway": self})
-        Logger.log("Gateway", add=True)
+        logger.info("+ Gateway")
 
     def get_address(self, feature_id: str, *, log=True):
         """ Get one address
@@ -283,9 +286,8 @@ class Gateway(pymem.Pymem):
                 addresses[feature_id].append(temp.value + offs[-1])
 
                 if log:
-                    Logger.log(
-                        f"Found {i}. address for {feature['name']} [{hex(self.storage.features.addresses[feature_id][i])}]!",
-                        add=True)
+                    logger.info(
+                        f"+ Found {i}. address for {feature['name']} [{hex(self.storage.features.addresses[feature_id][i])}]!")
 
             status = True
 
@@ -293,7 +295,7 @@ class Gateway(pymem.Pymem):
             status = False
 
             if log:
-                Logger.log(f"No address for {feature['name']}!", add=False)
+                logger.info(f"- No address for {feature['name']}!")
 
         self.status.update({
             feature_id: status
@@ -423,7 +425,7 @@ class Gateway(pymem.Pymem):
             # Something happened, but is not 100% sure
             except (pymem.exception.MemoryReadError, UnicodeDecodeError, Exception, pymem.exception.ProcessError) as e:
                 if log:
-                    Logger.log(f"Discord is unavailable!", add=False)
+                    logger.info(f"- Discord is unavailable!")
                 return False
 
             return True
@@ -499,7 +501,7 @@ class Gateway(pymem.Pymem):
 
                 # Fallback failed, try to read orignial address again
                 except (pymem.exception.MemoryReadError, pymem.exception.WinAPIError, pymem.exception.ProcessError, UnicodeDecodeError, UnicodeDecodeError, Exception):
-                    # Logger.log("Server fallback address failed!")
+                    # logger.info("Server fallback address failed!")
                     self.fallback_server_address = None
                     self.get_address("3", log=False)
                     return None
@@ -539,7 +541,7 @@ class Gateway(pymem.Pymem):
                     self.status[addr_id] = status
 
                 except pymem.exception.MemoryReadError:
-                    Logger.log(f"{feature['name']} is unavailable!", add=False)
+                    logger.info(f"- {feature['name']} is unavailable!")
                     self.status[addr_id] = False
 
         # Update ui
@@ -559,7 +561,7 @@ class Gateway(pymem.Pymem):
             .decode("utf8").rstrip()
 
         if version:
-            Logger.log(f"Found MC Version '{version}'")
+            logger.info(f"Found MC Version '{version}'")
 
             return version
 
@@ -574,8 +576,8 @@ class Gateway(pymem.Pymem):
 
         # When they aren't equal, update needed
         if self.current_mc_version != saved_mc_version:
-            Logger.log("Saved version doesn't match!")
+            logger.info("Saved version doesn't match!")
             return False
 
-        Logger.log("Saved version ist correct!")
+        logger.info("Saved version ist correct!")
         return True

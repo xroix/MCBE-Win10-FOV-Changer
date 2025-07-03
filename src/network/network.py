@@ -1,13 +1,16 @@
 """ Handles verifying and fetching things out from an external service """
 
 import json
+import logging
 
 import requests
 
 from src import ui
-from src.logger import Logger
 from src.processing import storage
 from src.exceptions import MessageHandlingError
+
+
+logger = logging.getLogger(__name__)
 
 
 class Network:
@@ -24,7 +27,7 @@ class Network:
 
         # Add to references
         self.references.update({"Network": self})
-        Logger.log("Network", add=True)
+        logger.info("+ Network")
 
     def fetch_features(self, current_version: str) -> bool:
         """ Fetch the data from the api
@@ -32,7 +35,7 @@ class Network:
         :returns: if succeed
         """
         version_id = "".join(current_version.split("."))
-        Logger.log(f"Getting features for '{version_id}'")
+        logger.info(f"Getting features for '{version_id}'")
 
         # Retry certain times
         data = None
@@ -40,7 +43,7 @@ class Network:
         while tries <= 3:
             try:
                 resp = requests.get(f"{self.storage.get('api')}offsets/{version_id}")
-                Logger.log(f"Feature request number {tries}")
+                logger.info(f"Feature request number {tries}")
 
                 # Too many request
                 if resp.status_code == 429:
@@ -70,14 +73,14 @@ class Network:
 
             # Alert message
             except MessageHandlingError as e:
-                Logger.log(e.message)
+                logger.info(e.message)
                 ui.queue_alert_message(self.references, e.message, warning=True)
                 return False
 
             tries += 1
 
         if not data:
-            Logger.log("Couldn't communicate with the server!")
+            logger.info("Couldn't communicate with the server!")
             ui.queue_alert_message(self.references, "Couldn't communicate with the server!", warning=True)
             return False
 
@@ -90,12 +93,12 @@ class Network:
                 self.storage.features = storage.Features.from_server_response(self.references, offs, saved_features=self.storage.features if self.storage.features else None)
 
             except json.JSONDecodeError:
-                Logger.log("Invalid response from server!")
+                logger.info("Invalid response from server!")
                 ui.queue_alert_message(self.references, "Invalid response from server!", warning=True)
                 return False
 
             except MessageHandlingError as e:
-                Logger.log(e.message)
+                logger.info(e.message)
                 ui.queue_alert_message(self.references, "Invalid offsets!", warning=True)
                 return False
 
@@ -104,5 +107,5 @@ class Network:
 
             self.storage.update_file()
 
-            Logger.log("Saved new features and version")
+            logger.info("Saved new features and version")
             return True

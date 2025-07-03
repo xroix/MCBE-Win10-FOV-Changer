@@ -1,6 +1,7 @@
 """ The entrypoint - core methods and classes"""
 import sys
 import threading
+import logging
 import time
 
 import pystray as ps
@@ -8,8 +9,10 @@ from PIL import Image
 
 from src import logger
 from src import ui, exceptions
-from src.logger import Logger
 from src.processing import storage, processing
+
+
+logger = logging.getLogger(__name__)
 
 
 class SystemTray:
@@ -44,9 +47,6 @@ class SystemTray:
             "Enabled": self.start_button,
             "Exit": self.stop_tray
         }
-
-        # Set up logger
-        logger.Logger.init(self.references)
 
     def start_button(self):
         """ Like the root start_button
@@ -113,9 +113,9 @@ class SystemTray:
             self.processing_thread.start()
 
             # Start tray
-            Logger.log("System Tray", add=True)
+            logger.info("+ System Tray")
             self.tray.run()
-            Logger.log("System Tray", add=False)
+            logger.info("- System Tray")
 
             self.on_shutdown()
 
@@ -141,7 +141,3 @@ class SystemTray:
 
             except RuntimeError:
                 sys.exit(0)
-
-        sys.exit(0)
-
-

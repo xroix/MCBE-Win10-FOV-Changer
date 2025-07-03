@@ -1,8 +1,12 @@
+import logging
+
 import pymem
 from pynput import keyboard
 
 from src import ui, exceptions
-from src.logger import Logger
+
+
+logger = logging.getLogger(__name__)
 
 
 class Listener(keyboard.Listener):
@@ -99,7 +103,7 @@ class Listener(keyboard.Listener):
                                 self.gateway.status_check()
 
                                 # Alert user
-                                Logger.log("Minecraft was closed!")
+                                logger.info("Minecraft was closed!")
                                 ui.queue_alert_message(self.references, "Minecraft was closed!", warning=True)
                                 self.references["Root"].bell()
                                 self.references["Root"].start_button_var.set("Start")

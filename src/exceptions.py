@@ -1,11 +1,12 @@
 import sys
 import time
+import logging
 import traceback
 import tkinter as tk
 from tkinter import messagebox
 
-from run import DEBUG
-from src.logger import Logger
+
+logger = logging.getLogger(__name__)
 
 
 # Override tkinter exception handler
@@ -28,33 +29,19 @@ def handle_error(references: dict):
     :param references: (dict) the references
     :raises: the last error if project is in debug mode
     """
-    if DEBUG:
-        raise
+    # So that our gui logging handler does not crash
+    if "RootThread" in references:
+        references["RootThread"].is_mainloop_running = False
 
-    # Extract traceback and start formatting message
-    tb = traceback.format_exc()
-    msg = f"----------------------------------------{time.strftime('[%d.%m.%Y - %H:%M:%S]', time.localtime(time.time()))}----------------------------------------\n"
+    # Add traceback to log
+    logger.exception(
+        "FOV-Changer has crashed!",
+        exc_info=True,
+        stack_info=True
+    )
 
-    # If available, write log from log_text
-    if "Root" in references and references["Root"].log_text:
-        references["Root"].log_text.config(state="normal")
-        msg += references["Root"].log_text.get("1.0", "end")
-
-    # or from the logger queue
-    if Logger.queue:
-        msg += "\n".join(Logger.queue) + "\n"
-
-    # Add the traceback
-    msg += f"{tb}\n\n"
-
-    # Write crash log
-    with open("crash_log.txt", "w+") as f:
-        f.write(msg)
-
-    # If available, notify
-    if "Root" in references:
-        messagebox.showerror(title="Fatal Error", message="Something bad happened! Check crash_log.txt for more insight!")
+    # Notify user
+    messagebox.showerror(title="Critical Error", message="FOV-Changer crashed! Check log.txt for more insight.\n\nIf you need help, feel free to join our Discord or open up an issue on GitHub. Please make sure to include the log.txt file created next to FOV-Changer.")
 
     # Kill all
     references["SystemTray"].stop_tray()
-    sys.exit(0)
