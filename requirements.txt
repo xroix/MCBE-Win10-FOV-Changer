@@ -10,7 +10,7 @@ pystray==0.19.5
 
 pywin32 == 310
 
-requests == 2.32.4
+requests == 2.33.0
 
 # Only for freezing the app
 # But we specifiy an older version, so that 
