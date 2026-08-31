@@ -1,3 +1,5 @@
+
+
 <div align="center"><center>
 
 ![Logo](./res/banner.png)
@@ -35,7 +37,7 @@ FOV-Changer has been updated to every new Minecraft version since 2020 (except b
 
 ## Installation
 
-You can use this [direct link](https://www.github.com/XroixHD/MCBE-Win10-FOV-Changer/releases/latest/download/FOV-Changer.zip ) to download FOV-Changer. Alternatively, you can choose the latest stable version manually in the [Github Releases](https://www.github.com/XroixHD/MCBE-Win10-FOV-Changer/releases/latest).
+You can use this [direct link](https://www.github.com/XroixHD/MCBE-Win10-FOV-Changer/releases/latest/download/FOV-Changer.zip) to download FOV-Changer. Alternatively, you can choose the latest stable version manually in the [Github Releases](https://www.github.com/XroixHD/MCBE-Win10-FOV-Changer/releases/latest).
 
 After downloading, extract the ZIP archive in order to run the executable `FOV-Changer.exe`. As of now, the FOV-Changer client must be opened and connected every time you play Minecraft.
 
